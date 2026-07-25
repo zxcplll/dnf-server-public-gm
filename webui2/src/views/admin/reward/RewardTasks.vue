@@ -1,0 +1,289 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue';
+import { Message, Modal } from '@arco-design/web-vue';
+import Request from '../../../api/Request';
+import ItemPicker from '../../../components/ItemPicker.vue';
+
+type RewardItem = {
+  item: any | null;
+  itemId: number;
+  quantity: number;
+  upgrade: number;
+  separateUpgrade: number;
+  sealFlag: boolean;
+  amplifyOption: number;
+  amplifyValue: number;
+};
+
+type TaskForm = {
+  name: string;
+  intervalMinutes: number;
+  targetType: string;
+  characterIds: number[];
+  message: string;
+  gold: number;
+  ceraPoint: number;
+  enabled: boolean;
+  items: RewardItem[];
+};
+
+const emptyItem = (): RewardItem => ({
+  item: null,
+  itemId: 0,
+  quantity: 1,
+  upgrade: 0,
+  separateUpgrade: 0,
+  sealFlag: false,
+  amplifyOption: 0,
+  amplifyValue: 0
+});
+
+const emptyForm = (): TaskForm => ({
+  name: '',
+  intervalMinutes: 60,
+  targetType: 'ALL',
+  characterIds: [],
+  message: '定时福利',
+  gold: 0,
+  ceraPoint: 0,
+  enabled: false,
+  items: [emptyItem()]
+});
+
+const loading = ref(false);
+const saving = ref(false);
+const tasks = ref<any[]>([]);
+const formVisible = ref(false);
+const editingId = ref<number | null>(null);
+const form = reactive<TaskForm>(emptyForm());
+const characters = ref<any[]>([]);
+const characterLoading = ref(false);
+
+const targetLabel = (type: string) => ({ ALL: '全服玩家', ONLINE: '全服在线', CHARACTERS: '指定角色' }[type] || type);
+const characterOptions = computed(() => characters.value.map(item => ({
+  label: `${item.characName || item.name || item.characNo}（${item.characNo}）`,
+  value: Number(item.characNo || item.id)
+})));
+
+const loadCharacters = async () => {
+  characterLoading.value = true;
+  try {
+    const response = await Request.get<any>('/api/v1/charac?page=1&pageSize=100');
+    characters.value = response.data?.list || [];
+  } catch (error: any) {
+    Message.error(error?.message || '角色列表加载失败');
+  } finally {
+    characterLoading.value = false;
+  }
+};
+
+const load = async () => {
+  loading.value = true;
+  try {
+    const response = await Request.get<any[]>('/api/v1/gm/reward/tasks');
+    tasks.value = Array.isArray(response.data) ? response.data : [];
+  } catch (error: any) {
+    Message.error(error?.message || '定时任务加载失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const resetForm = () => {
+  Object.assign(form, emptyForm());
+  editingId.value = null;
+};
+
+const openCreate = () => {
+  resetForm();
+  formVisible.value = true;
+  loadCharacters();
+};
+
+const openEdit = (task: any) => {
+  resetForm();
+  editingId.value = Number(task.id);
+  const payload = task.payload || {};
+  Object.assign(form, {
+    name: task.name || '',
+    intervalMinutes: Number(task.interval_minutes ?? task.intervalMinutes ?? 60),
+    targetType: task.target_type || task.targetType || 'ALL',
+    characterIds: Array.isArray(payload.characterIds) ? payload.characterIds.map(Number) : [],
+    message: payload.message || '定时福利',
+    gold: Number(payload.gold || 0),
+    ceraPoint: Number(payload.ceraPoint || 0),
+    enabled: Boolean(Number(task.enabled) || task.enabled === true),
+    items: Array.isArray(payload.items) && payload.items.length ? payload.items.map((item: any) => ({
+      ...emptyItem(),
+      ...item,
+      itemId: Number(item.itemId || 0),
+      quantity: Number(item.quantity || 1),
+      upgrade: Number(item.upgrade || 0),
+      separateUpgrade: Number(item.separateUpgrade ?? item.seperateUpgrade ?? 0),
+      amplifyOption: Number(item.amplifyOption || 0),
+      amplifyValue: Number(item.amplifyValue || 0)
+    })) : [emptyItem()]
+  });
+  formVisible.value = true;
+  loadCharacters();
+};
+
+const addItem = () => form.items.push(emptyItem());
+const removeItem = (index: number) => {
+  if (form.items.length > 1) form.items.splice(index, 1);
+};
+
+const normalizedPayload = () => ({
+  name: form.name.trim() || '定时福利',
+  intervalMinutes: Math.max(1, Number(form.intervalMinutes || 1)),
+  targetType: form.targetType,
+  characterIds: form.targetType === 'CHARACTERS' ? form.characterIds : [],
+  message: form.message,
+  gold: Math.max(0, Number(form.gold || 0)),
+  ceraPoint: Math.max(0, Number(form.ceraPoint || 0)),
+  enabled: form.enabled,
+  items: form.items.filter(item => item.itemId > 0).map(item => ({
+    itemId: Number(item.item?.id || item.itemId),
+    quantity: Math.max(1, Number(item.quantity || 1)),
+    upgrade: Number(item.upgrade || 0),
+    separateUpgrade: Number(item.separateUpgrade || 0),
+    sealFlag: Boolean(item.sealFlag),
+    amplifyOption: Number(item.amplifyOption || 0),
+    amplifyValue: Number(item.amplifyValue || 0)
+  }))
+});
+
+const save = async () => {
+  const payload = normalizedPayload();
+  if (payload.items.length === 0 && payload.gold === 0 && payload.ceraPoint === 0) {
+    Message.error('请至少填写一种物品、金币或点券');
+    return;
+  }
+  if (payload.targetType === 'CHARACTERS' && payload.characterIds.length === 0) {
+    Message.error('请选择至少一个发放角色');
+    return;
+  }
+  saving.value = true;
+  try {
+    if (editingId.value) await Request.put(`/api/v1/gm/reward/tasks/${editingId.value}`, payload);
+    else await Request.post('/api/v1/gm/reward/tasks', payload);
+    Message.success(editingId.value ? '任务已更新' : '任务已创建');
+    formVisible.value = false;
+    await load();
+  } catch (error: any) {
+    Message.error(error?.message || '保存任务失败');
+  } finally {
+    saving.value = false;
+  }
+};
+
+const toggle = async (task: any) => {
+  try {
+    await Request.put(`/api/v1/gm/reward/tasks/${task.id}/toggle`, undefined, { params: { enabled: !Boolean(Number(task.enabled) || task.enabled === true) } });
+    Message.success('任务状态已更新');
+    await load();
+  } catch (error: any) {
+    Message.error(error?.message || '更新任务状态失败');
+  }
+};
+
+const remove = (task: any) => {
+  Modal.confirm({
+    title: '删除定时任务',
+    content: `确定删除“${task.name || task.id}”吗？`,
+    onOk: async () => {
+      try {
+        await Request.delete(`/api/v1/gm/reward/tasks/${task.id}`);
+        Message.success('任务已删除');
+        await load();
+      } catch (error: any) {
+        Message.error(error?.message || '删除任务失败');
+      }
+    }
+  });
+};
+
+onMounted(load);
+</script>
+
+<template>
+  <div class="reward-page">
+    <a-card>
+      <template #title>定时任务管理</template>
+      <template #extra><a-button type="primary" @click="openCreate">新建任务</a-button></template>
+      <a-table :data="tasks" :loading="loading" :pagination="false" row-key="id">
+        <template #columns>
+          <a-table-column title="任务名称" data-index="name" />
+          <a-table-column title="发放间隔">
+            <template #cell="{ record }">每 {{ record.interval_minutes ?? record.intervalMinutes }} 分钟</template>
+          </a-table-column>
+          <a-table-column title="发放范围">
+            <template #cell="{ record }">{{ targetLabel(record.target_type || record.targetType) }}</template>
+          </a-table-column>
+          <a-table-column title="下次执行" data-index="next_run_at" />
+          <a-table-column title="状态">
+            <template #cell="{ record }">
+              <a-tag :color="Boolean(Number(record.enabled) || record.enabled === true) ? 'green' : 'gray'">
+                {{ Boolean(Number(record.enabled) || record.enabled === true) ? '运行中' : '已关闭' }}
+              </a-tag>
+            </template>
+          </a-table-column>
+          <a-table-column title="操作" :width="220">
+            <template #cell="{ record }">
+              <a-space>
+                <a-button size="small" @click="openEdit(record)">编辑</a-button>
+                <a-button size="small" type="primary" @click="toggle(record)">{{ Boolean(Number(record.enabled) || record.enabled === true) ? '关闭' : '开启' }}</a-button>
+                <a-button size="small" status="danger" @click="remove(record)">删除</a-button>
+              </a-space>
+            </template>
+          </a-table-column>
+        </template>
+      </a-table>
+      <a-empty v-if="!loading && tasks.length === 0" description="暂时没有定时任务" />
+    </a-card>
+
+    <a-modal v-model:visible="formVisible" :title="editingId ? '编辑定时任务' : '新建定时任务'" :width="980" :mask-closable="false" :ok-loading="saving" @ok="save">
+      <a-form :model="form" layout="vertical">
+        <a-row :gutter="16">
+          <a-col :span="10"><a-form-item label="任务名称"><a-input v-model="form.name" placeholder="例如：每日登录福利" /></a-form-item></a-col>
+          <a-col :span="7"><a-form-item label="发放间隔（分钟）"><a-input-number v-model="form.intervalMinutes" :min="1" :max="10080" style="width: 100%" /></a-form-item></a-col>
+          <a-col :span="7"><a-form-item label="启用任务"><a-switch v-model="form.enabled" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="发放范围"><a-select v-model="form.targetType" style="width: 100%"><a-option value="ALL">全服玩家</a-option><a-option value="ONLINE">全服在线</a-option><a-option value="CHARACTERS">指定角色</a-option></a-select></a-form-item></a-col>
+          <a-col v-if="form.targetType === 'CHARACTERS'" :span="16"><a-form-item label="发放角色"><a-select v-model="form.characterIds" multiple allow-search :loading="characterLoading" :options="characterOptions" placeholder="选择一个或多个角色" style="width: 100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="金币"><a-input-number v-model="form.gold" :min="0" :max="2147483647" style="width: 100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="点券"><a-input-number v-model="form.ceraPoint" :min="0" :max="2147483647" style="width: 100%" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item label="邮件说明"><a-input v-model="form.message" /></a-form-item></a-col>
+        </a-row>
+
+        <div class="items-heading"><strong>发放物品</strong><a-button size="small" @click="addItem">添加物品</a-button></div>
+        <div class="items-help">
+          <icon-info-circle />
+          <span>数量为邮件中的物品数量；强化和锻造填写等级；增幅属性与数值用于红字属性；封装表示物品是否以封装状态发送。</span>
+        </div>
+        <div v-for="(item, index) in form.items" :key="index" class="item-editor">
+          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="300" @change="(value) => item.itemId = Number(value?.id || 0)" /></div>
+          <div class="item-field"><span class="field-label">数量</span><a-input-number v-model="item.quantity" :min="1" :max="100000" /></div>
+          <div class="item-field"><span class="field-label">强化等级</span><a-input-number v-model="item.upgrade" :min="0" :max="31" /></div>
+          <div class="item-field"><span class="field-label">锻造等级</span><a-input-number v-model="item.separateUpgrade" :min="0" :max="31" /></div>
+          <div class="item-field"><span class="field-label">增幅属性</span><a-select v-model="item.amplifyOption" style="width: 120px"><a-option :value="0">无</a-option><a-option :value="1">体力</a-option><a-option :value="2">精神</a-option><a-option :value="3">力量</a-option><a-option :value="4">智力</a-option></a-select></div>
+          <div class="item-field"><span class="field-label">增幅数值</span><a-input-number v-model="item.amplifyValue" :min="0" :max="65535" /></div>
+          <div class="item-field seal-field"><span class="field-label">封装状态</span><a-switch v-model="item.sealFlag" checked-text="封装" unchecked-text="不封装" /></div>
+          <a-button status="danger" size="small" :disabled="form.items.length === 1" @click="removeItem(index)">移除</a-button>
+        </div>
+      </a-form>
+    </a-modal>
+  </div>
+</template>
+
+<style scoped lang="less">
+.reward-page { padding: 16px; }
+.items-heading { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 12px; }
+.items-help { display: flex; align-items: flex-start; gap: 6px; color: var(--color-text-3); background: var(--color-fill-2); border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 12px; line-height: 1.5; }
+.item-editor { display: flex; align-items: flex-end; gap: 10px; padding: 12px; margin-bottom: 8px; background: var(--color-fill-2); border: 1px solid var(--color-border-2); border-radius: 8px; flex-wrap: wrap; }
+.item-editor-main { flex: 1 1 300px; min-width: 260px; }
+.item-field { display: flex; flex-direction: column; gap: 5px; }
+.field-label { color: var(--color-text-2); font-size: 12px; line-height: 1; white-space: nowrap; }
+.item-editor :deep(.arco-input-number), .item-editor :deep(.arco-select) { width: 112px; }
+.seal-field { min-width: 92px; }
+@media (max-width: 900px) { .reward-page { padding: 8px; } }
+</style>

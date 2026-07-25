@@ -121,6 +121,14 @@ const routes: Array<RouteRecordRaw> = [
                 }
             },
             {
+                path: 'monitor',
+                name: 'ServerMonitor',
+                component: () => import('../views/admin/player/ServerMonitor.vue'),
+                meta: {
+                    title: '服务器监控'
+                }
+            },
+            {
                 path: 'player',
                 meta: {
                     title: '玩家管理'
@@ -140,6 +148,62 @@ const routes: Array<RouteRecordRaw> = [
                         component: () => import('../views/admin/player/PlayerRoles.vue'),
                         meta: {
                             title: '玩家角色管理'
+                        }
+                    }
+                ]
+            },
+            {
+                path: 'reward',
+                meta: {
+                    title: '奖励管理'
+                },
+                children: [
+                    {
+                        path: 'tasks',
+                        name: 'RewardTasks',
+                        component: () => import('../views/admin/reward/RewardTasks.vue'),
+                        meta: {
+                            title: '定时任务管理'
+                        }
+                    },
+                    {
+                        path: 'global',
+                        name: 'GlobalReward',
+                        component: () => import('../views/admin/reward/GlobalReward.vue'),
+                        meta: {
+                            title: '全服奖励发放'
+                        }
+                    }
+                ]
+            },
+            {
+                path: 'mail',
+                meta: {
+                    title: '邮件管理'
+                },
+                children: [
+                    {
+                        path: 'query',
+                        name: 'MailQuery',
+                        component: () => import('../views/admin/mail/MailQuery.vue'),
+                        meta: {
+                            title: '邮件查询'
+                        }
+                    }
+                ]
+            },
+            {
+                path: 'database',
+                meta: {
+                    title: '数据库管理'
+                },
+                children: [
+                    {
+                        path: 'backup',
+                        name: 'DatabaseBackup',
+                        component: () => import('../views/admin/database/DatabaseBackup.vue'),
+                        meta: {
+                            title: '备份与恢复'
                         }
                     }
                 ]

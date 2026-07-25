@@ -121,10 +121,21 @@ public class CharacServiceImpl implements CharacService {
 
     @Override
     public void update(CharacInfo info) {
+        if (info == null || info.getCharacNo() <= 0) {
+            return;
+        }
         CharacInfo characInfo = characInfoDao.get(info.getCharacNo());
         if (null == characInfo){
             return;
         }
+        if (info.getLev() < 1 || info.getLev() > 100
+                || info.getJob() < 0 || info.getJob() > 255
+                || info.getGrowType() < 0 || info.getGrowType() > 255) {
+            throw new IllegalArgumentException("等级、职业或转职参数超出范围");
+        }
+        characInfo.setLev(info.getLev());
+        characInfo.setJob(info.getJob());
+        characInfo.setGrowType(info.getGrowType());
         // 三速
         characInfo.setAttackSpeed(info.getAttackSpeed());
         characInfo.setCastSpeed(info.getCastSpeed());

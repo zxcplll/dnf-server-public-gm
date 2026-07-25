@@ -184,17 +184,40 @@ const onPageSizeChange = (pageSize: number) => {
 
 const openEdit = (record: any) => {
 	const form = JSON.parse(JSON.stringify(record || {}));
-	form.growType = getGrowTypeName(form.job, form.growType);
-	form.job = getJobName(form.job);
+	form.lev = Number(form.lev ?? 1);
+	form.job = Number(form.job ?? 0);
+	form.growType = Number(form.growType ?? 0);
 	editOption.value.form = form;
 	editOption.value.open = true;
 };
 
+const getGrowTypeOptions = (job: number | string | undefined) => {
+	const subs = jobs.value[Number(job)]?.subs as Record<string, string> | undefined;
+	return Object.entries(subs ?? {}).map(([value, label]) => ({value: Number(value), label}));
+};
+
+const onEditJobChange = (job: unknown) => {
+	const options = getGrowTypeOptions(Number(job));
+	const current = Number(editOption.value.form.growType);
+	if (!options.some(option => option.value === current)) {
+		editOption.value.form.growType = options[0]?.value ?? 0;
+	}
+};
+
 const submitEdit = async () => {
 	if (!editOption.value.form?.characNo) return;
-	const payload = {...editOption.value.form};
-	delete payload.job;
-	delete payload.growType;
+	const payload = {
+		...editOption.value.form,
+		lev: Number(editOption.value.form.lev),
+		job: Number(editOption.value.form.job),
+		growType: Number(editOption.value.form.growType)
+	};
+	if (!Number.isInteger(payload.lev) || payload.lev < 1 || payload.lev > 100
+		|| !Number.isInteger(payload.job) || payload.job < 0
+		|| !Number.isInteger(payload.growType) || payload.growType < 0) {
+		Message.error("等级、职业或转职参数无效");
+		return;
+	}
 	try {
 		await Request.put("api/v1/charac", payload);
 		Message.success("修改成功，请上游戏查看");
@@ -388,17 +411,21 @@ onMounted(() => {
 					</a-col>
 					<a-col :span="12">
 						<a-form-item label="等级">
-							<a-input v-model="editOption.form.lev" disabled />
+							<a-input-number v-model="editOption.form.lev" :min="1" :max="100" />
 						</a-form-item>
 					</a-col>
 					<a-col :span="12">
 						<a-form-item label="职业">
-							<a-input v-model="editOption.form.job" disabled />
+							<a-select v-model="editOption.form.job" @change="onEditJobChange" style="width: 100%">
+								<a-option v-for="(job, index) in jobs" :key="index" :value="index" :label="job.name" />
+							</a-select>
 						</a-form-item>
 					</a-col>
 					<a-col :span="12">
 						<a-form-item label="转职">
-							<a-input v-model="editOption.form.growType" disabled />
+							<a-select v-model="editOption.form.growType" style="width: 100%">
+								<a-option v-for="option in getGrowTypeOptions(editOption.form.job)" :key="option.value" :value="option.value" :label="option.label" />
+							</a-select>
 						</a-form-item>
 					</a-col>
 

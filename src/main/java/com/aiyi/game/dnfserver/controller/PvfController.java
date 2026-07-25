@@ -31,6 +31,9 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -171,25 +174,40 @@ public class PvfController {
         if (!accountVO.isAdmin()) {
             throw new ValidationException("您不能上传PVF");
         }
+        if (file == null || file.isEmpty()) {
+            throw new ValidationException("请选择有效的PVF文件");
+        }
         // 临时保存
         CacheUtil.lock(20000, Key.as("pvf_upload_lock"), () -> {
-            MinFieldUtil.cpyFile("Script.pvf", "Script_backup.pvf");
+            Path pvfPath = new File("data/Script.pvf").toPath();
+            Path backupPath = new File("data/Script_backup.pvf").toPath();
             try {
-                MinFieldUtil.writeFile("Script.pvf", file.getBytes());
+                Files.createDirectories(pvfPath.getParent());
+                if (Files.exists(pvfPath)) {
+                    Files.copy(pvfPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+                }
+                file.transferTo(pvfPath.toFile());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
             try {
                 pvfManager.init();
-                int size = MinFieldUtil.getFileSizeKB(new File("Script.pvf").getAbsolutePath());
+                int size = MinFieldUtil.getFileSizeKB(pvfPath.toFile().getAbsolutePath());
                 List<Equipment> equipmentList = pvfManager.getEquipmentList();
                 List<Stackable> stackableList = pvfManager.getStackableList();
+                pvfManager.clearItemCache();
                 PvfCache.setPvfSize(size);
                 PvfCache.setEquipmentList(equipmentList);
                 PvfCache.setStackableList(stackableList);
             } catch (Exception e) {
                 // 恢复备份文件
-                MinFieldUtil.cpyFile("Script_backup.pvf", "Script.pvf");
+                if (Files.exists(backupPath)) {
+                    try {
+                        Files.copy(backupPath, pvfPath, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException restoreError) {
+                        e.addSuppressed(restoreError);
+                    }
+                }
                 pvfManager.init();
                 throw new ValidationException("PVF文件解析失败，已恢复为原文件，请检查后重新上传！错误信息：" + e.getMessage());
             }

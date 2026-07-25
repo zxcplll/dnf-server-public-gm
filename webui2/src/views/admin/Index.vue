@@ -40,6 +40,44 @@ menus.value = [
     ]
   },
   {
+    path: '/monitor',
+    meta: { title: '服务器监控', icon: 'dashboard' }
+  },
+  {
+    path: '/reward',
+    meta: { title: '奖励管理', icon: 'home' },
+    children: [
+      {
+        path: 'tasks',
+        meta: { title: '定时任务管理', icon: 'home' },
+      },
+      {
+        path: 'global',
+        meta: { title: '全服奖励发放', icon: 'home' },
+      }
+    ]
+  },
+  {
+    path: '/mail',
+    meta: { title: '邮件管理', icon: 'home' },
+    children: [
+      {
+        path: 'query',
+        meta: { title: '邮件查询', icon: 'home' },
+      }
+    ]
+  },
+  {
+    path: '/database',
+    meta: { title: '数据库管理', icon: 'home' },
+    children: [
+      {
+        path: 'backup',
+        meta: { title: '备份与恢复', icon: 'home' },
+      }
+    ]
+  },
+  {
     path: '/pvf',
     meta: { title: 'PVF管理', icon: 'home' },
     children: [
@@ -142,12 +180,13 @@ const imgBaseUrl = ApiGlobalConfig.imageViewer.baseURL
 
 
 
-const onDeleteTab = (tabKey: string) => {
-  const index = historyPages.value.findIndex(page => page.path === tabKey);
+const onDeleteTab = (tabKey: string | number, _ev?: Event) => {
+  const key = String(tabKey);
+  const index = historyPages.value.findIndex(page => page.path === key);
   if (index !== -1) {
     historyPages.value.splice(index, 1);
     // 如果关闭的是当前激活的标签页，切换到最后一个标签页
-    if (tabKey === selectedKeys.value[0]) {
+    if (key === selectedKeys.value[0]) {
       const lastPage = historyPages.value[historyPages.value.length - 1];
       if (lastPage) {
         onClickMenuItem(lastPage.path);
@@ -246,7 +285,7 @@ Request.get('api/v1/account?page=1&pageSize=1')
         </div>
       </a-layout-header>
       <a-layout-content class="layout-content">
-        <a-tabs class="layout-tabs" hide-content closable editable @delete="onDeleteTab" v-model:active-key="selectedKeys[0]" @change="(key: string | number, _ev: Event) => onClickMenuItem(String(key))">
+        <a-tabs class="layout-tabs" hide-content closable editable @delete="onDeleteTab" v-model:active-key="selectedKeys[0]" @change="(key: string | number) => onClickMenuItem(String(key))">
           <a-tab-pane v-for="page in historyPages" :key="page.path" :title="page.meta.title" :closable="page.path !== selectedKeys[0]">
           </a-tab-pane>
         </a-tabs>

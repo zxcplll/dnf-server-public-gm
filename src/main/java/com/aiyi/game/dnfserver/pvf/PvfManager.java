@@ -3,6 +3,7 @@ package com.aiyi.game.dnfserver.pvf;
 import cn.hutool.json.JSONObject;
 import com.aiyi.game.dnfserver.entity.equipment.Equipment;
 import com.aiyi.game.dnfserver.entity.equipment.EquipmentType;
+import com.aiyi.game.dnfserver.entity.common.Item;
 import com.aiyi.game.dnfserver.entity.stackable.Stackable;
 import com.aiyi.game.dnfserver.entity.stackable.StackableType;
 import com.xiaoyouma.dnf.parser.pvf.coder.PvfCoder;
@@ -18,6 +19,8 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
+import java.util.Collections;
 
 /**
  * @author xiatian
@@ -27,18 +30,49 @@ public class PvfManager {
 
     Logger logger = LoggerFactory.getLogger(PvfManager.class);
 
+    private volatile Map<Integer, Item> itemCache;
+
     @PostConstruct
     public void init(){
         File file = new File("data/Script.pvf");
         if (!file.exists()){
             logger.warn("Script.pvf not found!");
         }else{
-            PvfCoder.initialize(file.getAbsolutePath(), Charset.forName("Big5"));
+            // Current PVFs use the extended Big5 mapping for modern item names.
+            PvfCoder.initialize(file.getAbsolutePath(), Charset.forName("Big5-HKSCS"));
         }
     }
 
     public Pvf getPvf(){
         return PvfCoder.getPvf();
+    }
+
+    /** Resolve a PVF item once and reuse it for mail/reward enrichment. */
+    public Item findItem(int id) {
+        if (id <= 0) {
+            return null;
+        }
+        Map<Integer, Item> cache = itemCache;
+        if (cache == null) {
+            synchronized (this) {
+                cache = itemCache;
+                if (cache == null) {
+                    Map<Integer, Item> loaded = new HashMap<>();
+                    for (Equipment item : getEquipmentList()) {
+                        loaded.put(item.getId(), item);
+                    }
+                    for (Stackable item : getStackableList()) {
+                        loaded.put(item.getId(), item);
+                    }
+                    itemCache = cache = Collections.unmodifiableMap(loaded);
+                }
+            }
+        }
+        return cache.get(id);
+    }
+
+    public void clearItemCache() {
+        itemCache = null;
     }
 
     /**

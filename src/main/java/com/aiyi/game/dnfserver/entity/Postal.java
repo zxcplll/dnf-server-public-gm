@@ -3,7 +3,9 @@ package com.aiyi.game.dnfserver.entity;
 import com.aiyi.core.annotation.po.FieldName;
 import com.aiyi.core.annotation.po.ID;
 import com.aiyi.core.annotation.po.TableName;
+import com.aiyi.core.annotation.po.TempField;
 import com.aiyi.core.beans.PO;
+import com.aiyi.game.dnfserver.entity.common.ItemIcon;
 import com.aiyi.game.dnfserver.utils.MinFieldUtil;
 import com.aiyi.game.dnfserver.utils.Simple;
 
@@ -113,6 +115,30 @@ public class Postal extends PO {
      */
     @FieldName(name = "seperate_upgrade")
     private int seperateUpgrade;
+
+    @TempField
+    private String itemName;
+
+    @TempField
+    private ItemIcon itemIcon;
+
+    @TempField
+    private String receiverName;
+
+    @TempField
+    private long receiverUid;
+
+    @TempField
+    private Date receiveTime;
+
+    @TempField
+    private boolean claimed;
+
+    @TempField
+    private String senderType;
+
+    @TempField
+    private String letterText;
 
 
     public long getPostalId() {
@@ -233,6 +259,70 @@ public class Postal extends PO {
 
     public void setSeperateUpgrade(int seperateUpgrade) {
         this.seperateUpgrade = seperateUpgrade;
+    }
+
+    public String getItemName() {
+        return itemName;
+    }
+
+    public void setItemName(String itemName) {
+        this.itemName = itemName;
+    }
+
+    public ItemIcon getItemIcon() {
+        return itemIcon;
+    }
+
+    public void setItemIcon(ItemIcon itemIcon) {
+        this.itemIcon = itemIcon;
+    }
+
+    public String getReceiverName() {
+        return receiverName;
+    }
+
+    public void setReceiverName(String receiverName) {
+        this.receiverName = receiverName;
+    }
+
+    public long getReceiverUid() {
+        return receiverUid;
+    }
+
+    public void setReceiverUid(long receiverUid) {
+        this.receiverUid = receiverUid;
+    }
+
+    public Date getReceiveTime() {
+        return receiveTime;
+    }
+
+    public void setReceiveTime(Date receiveTime) {
+        this.receiveTime = receiveTime;
+    }
+
+    public boolean isClaimed() {
+        return claimed;
+    }
+
+    public void setClaimed(boolean claimed) {
+        this.claimed = claimed;
+    }
+
+    public String getSenderType() {
+        return senderType;
+    }
+
+    public void setSenderType(String senderType) {
+        this.senderType = senderType;
+    }
+
+    public String getLetterText() {
+        return letterText;
+    }
+
+    public void setLetterText(String letterText) {
+        this.letterText = letterText;
     }
 
     /**

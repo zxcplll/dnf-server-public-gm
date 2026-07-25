@@ -55,7 +55,9 @@ public class PostalServiceImpl implements PostalService {
 
     @Override
     public void sendMail(Postal postal) {
-        postal.setSendCharacName("DNF Manager");
+        if (StringUtils.isEmpty(postal.getSendCharacName())) {
+            postal.setSendCharacName("GM后台");
+        }
         postalDao.add(postal);
     }
 }

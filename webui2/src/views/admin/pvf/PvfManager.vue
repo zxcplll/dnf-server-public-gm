@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, nextTick } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, nextTick, watch } from 'vue';
 import Request from '../../../api/Request';
 import { Message } from '@arco-design/web-vue';
 import ItemImg from '../../../components/ItemImg.vue';
@@ -294,9 +294,55 @@ const onPageChange = (p: number) => {
 // hover detail panel
 const hoverItem = ref<PvfItem | null>(null);
 const hoverPos = ref({ x: 0, y: 0 });
-const updateHoverPos = (evt: MouseEvent) => {
-  hoverPos.value = { x: evt.clientX + 16, y: evt.clientY + 16 };
+const hoverPanelEl = ref<HTMLElement | null>(null);
+const pointerPos = ref({ x: 0, y: 0 });
+let hoverRafId: number | null = null;
+
+const positionHoverPanel = () => {
+  if (!hoverItem.value) return;
+
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const margin = 12;
+  const gap = 16;
+  const panelRect = hoverPanelEl.value?.getBoundingClientRect();
+  const panelWidth = panelRect?.width || 320;
+  const panelHeight = panelRect?.height || 240;
+
+  const rightX = pointerPos.value.x + gap;
+  const leftX = pointerPos.value.x - gap - panelWidth;
+  const preferredX = rightX + panelWidth <= viewportWidth - margin ? rightX : leftX;
+  const maxX = Math.max(margin, viewportWidth - panelWidth - margin);
+
+  const belowY = pointerPos.value.y + gap;
+  const aboveY = pointerPos.value.y - gap - panelHeight;
+  const preferredY = belowY + panelHeight <= viewportHeight - margin ? belowY : aboveY;
+  const maxY = Math.max(margin, viewportHeight - panelHeight - margin);
+
+  hoverPos.value = {
+    x: Math.max(margin, Math.min(preferredX, maxX)),
+    y: Math.max(margin, Math.min(preferredY, maxY))
+  };
 };
+
+const scheduleHoverPosition = () => {
+  if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
+  hoverRafId = requestAnimationFrame(() => {
+    hoverRafId = null;
+    positionHoverPanel();
+  });
+};
+
+const updateHoverPos = (evt: MouseEvent) => {
+  pointerPos.value = { x: evt.clientX, y: evt.clientY };
+  scheduleHoverPosition();
+};
+
+watch(hoverItem, async (item) => {
+  if (!item) return;
+  await nextTick();
+  scheduleHoverPosition();
+});
 
 const rowsForHover = computed(() => {
   if (!hoverItem.value) return [] as Array<{ k: string; v: string }>;
@@ -372,9 +418,13 @@ const rowsForHover = computed(() => {
   return out;
 });
 
+// Kept for compatibility with older custom themes that read this computed value.
+void rowsForHover;
+
 // upload
 const fileInput = ref<HTMLInputElement | null>(null);
 const uploading = ref(false);
+const uploadProgress = ref(0);
 const selectPvfFile = () => {
   if (!pvfInfo.value.canUpload) return;
   fileInput.value?.click();
@@ -386,15 +436,25 @@ const handleFileUpload = async (event: Event) => {
   if (!file) return;
 
   uploading.value = true;
+  uploadProgress.value = 0;
   try {
     const data = new FormData();
     data.append('file', file);
     await Request.post('/api/v1/pvf/upload', data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      timeout: 30 * 60 * 1000,
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          uploadProgress.value = Math.min(99, Math.round(progressEvent.loaded / progressEvent.total * 100));
+        }
+      }
     });
+    uploadProgress.value = 100;
     Message.success('上传成功，PVF已更新');
     await loadPvfInfo();
     await loadList();
+  } catch (error: any) {
+    const message = error?.response?.data?.message || error?.message || 'PVF上传失败';
+    Message.error(message);
   } finally {
     uploading.value = false;
     // reset input so selecting the same file again triggers change
@@ -463,6 +523,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleMeasure);
   if (rafId != null) cancelAnimationFrame(rafId);
+  if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
   if (ro) {
     ro.disconnect();
     ro = null;
@@ -488,7 +549,7 @@ onMounted(async () => {
       </div>
       <div class="pvf-actions">
         <a-button type="primary" :disabled="!pvfInfo.canUpload || uploading" @click="selectPvfFile">
-          上传新PVF
+          {{ uploading ? `上传中 ${uploadProgress}%` : '上传新PVF' }}
         </a-button>
         <input ref="fileInput" type="file" style="display: none" @change="handleFileUpload" />
       </div>
@@ -611,7 +672,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-if="hoverItem" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
+      <div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
         <div class="hover-left">
           <ItemImg :icon="(hoverItem.icon || { path: '', index: 0 })" :rarity="hoverItem.rarity ?? 0" style="width: 48px; height: 48px" />
         </div>
@@ -660,8 +721,8 @@ onMounted(async () => {
               {{ row.label }}{{ row.value ? ' +' + row.value : '' }}
             </div>
           </div>
-          <div class="hover-explain" v-if="hoverItem.explain">{{ hoverItem.explain.replaceAll('%%', '%').replaceAll('\\n', '\n') }}</div>
-          <div class="hover-desc" v-if="hoverItem.description">{{ hoverItem.description.replaceAll('%%', '%').replaceAll('\\n', '\n') }}</div>
+          <div class="hover-explain" v-if="hoverItem.explain">{{ hoverItem.explain.split('%%').join('%').split('\\n').join('\n') }}</div>
+          <div class="hover-desc" v-if="hoverItem.description">{{ hoverItem.description.split('%%').join('%').split('\\n').join('\n') }}</div>
         </div>
       </div>
     </div>
@@ -974,10 +1035,15 @@ onMounted(async () => {
   padding: 12px;
   border-radius: 10px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
-  max-width: 420px;
+  width: min(420px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
   pointer-events: none;
   display: flex;
   gap: 12px;
+  overflow-wrap: anywhere;
 }
 
 .hover-left {

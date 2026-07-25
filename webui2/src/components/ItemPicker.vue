@@ -211,6 +211,7 @@ const onWindowViewportChange = () => {
 		rafId = null;
 		updateViewportWidth();
 		updatePopupHeights();
+		scheduleHoverPosition();
 	});
 };
 
@@ -221,6 +222,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	cleanupSizeObserver();
 	if (rafId != null) cancelAnimationFrame(rafId);
+	if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
 	window.removeEventListener("resize", onWindowViewportChange);
 	window.removeEventListener("scroll", onWindowViewportChange, true);
 });
@@ -232,6 +234,44 @@ const page = ref(1);
 
 const hoverItem = ref<Item | null>(null);
 const hoverPos = ref({x: 0, y: 0});
+const hoverPanelEl = ref<HTMLElement | null>(null);
+const pointerPos = ref({x: 0, y: 0});
+let hoverRafId: number | null = null;
+
+const positionHoverPanel = () => {
+	if (!hoverItem.value) return;
+
+	const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+	const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+	const margin = 12;
+	const gap = 16;
+	const panelRect = hoverPanelEl.value?.getBoundingClientRect();
+	const panelWidth = panelRect?.width || 320;
+	const panelHeight = panelRect?.height || 240;
+
+	const rightX = pointerPos.value.x + gap;
+	const leftX = pointerPos.value.x - gap - panelWidth;
+	const preferredX = rightX + panelWidth <= viewportWidth - margin ? rightX : leftX;
+	const maxX = Math.max(margin, viewportWidth - panelWidth - margin);
+
+	const belowY = pointerPos.value.y + gap;
+	const aboveY = pointerPos.value.y - gap - panelHeight;
+	const preferredY = belowY + panelHeight <= viewportHeight - margin ? belowY : aboveY;
+	const maxY = Math.max(margin, viewportHeight - panelHeight - margin);
+
+	hoverPos.value = {
+		x: Math.max(margin, Math.min(preferredX, maxX)),
+		y: Math.max(margin, Math.min(preferredY, maxY))
+	};
+};
+
+const scheduleHoverPosition = () => {
+	if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
+	hoverRafId = requestAnimationFrame(() => {
+		hoverRafId = null;
+		positionHoverPanel();
+	});
+};
 
 const categoryGroups = ref([
 	{
@@ -331,8 +371,15 @@ const stackableTypeLabel: Record<string, string> = {
 const inputWidth = computed(() => typeof props.width === "number" ? `${props.width}px` : props.width);
 
 const updateHoverPos = (event: MouseEvent) => {
-	hoverPos.value = {x: event.clientX + 16, y: event.clientY + 16};
+	pointerPos.value = {x: event.clientX, y: event.clientY};
+	scheduleHoverPosition();
 };
+
+watch(hoverItem, async (item) => {
+	if (!item) return;
+	await nextTick();
+	scheduleHoverPosition();
+});
 
 const getItemTypeText = (item: Item) => {
 	if (item.equipmentTypeStr) return item.equipmentTypeStr;
@@ -605,7 +652,7 @@ onMounted(() => {
 							/>
 						</div>
 					</div>
-					<div v-if="hoverItem" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
+					<div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
 						<div class="hover-panel-icon-col">
 							<ItemImg :icon="hoverItem.icon" :rarity="hoverItem.rarity ?? 0" style="width: 48px; height: 48px;" />
 						</div>
@@ -643,8 +690,8 @@ onMounted(() => {
 							<div class="hover-bonus" v-if="hoverBonusRows.length">
 								<div class="hover-bonus-row" v-for="row in hoverBonusRows" :key="row.label">{{ row.label }}{{ row.value ? ' +' + row.value : '' }}</div>
 							</div>
-							<div v-if="hoverItem.explain" class="hover-explain">{{ hoverItem.explain.replaceAll('%%', '%').replaceAll('\\n', '\n') }}</div>
-							<div v-if="hoverItem.description" class="hover-desc">{{ hoverItem.description.replaceAll('%%', '%').replaceAll('\\n', '\n') }}</div>
+							<div v-if="hoverItem.explain" class="hover-explain">{{ hoverItem.explain.split('%%').join('%').split('\\n').join('\n') }}</div>
+							<div v-if="hoverItem.description" class="hover-desc">{{ hoverItem.description.split('%%').join('%').split('\\n').join('\n') }}</div>
 						</div>
 					</div>
 				</div>
@@ -907,13 +954,18 @@ onMounted(() => {
 	padding: 12px;
 	border-radius: 8px;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-	max-width: 400px;
+	width: min(400px, calc(100vw - 24px));
+	max-height: calc(100vh - 24px);
+	box-sizing: border-box;
+	overflow-y: auto;
+	overflow-x: hidden;
 	pointer-events: none;
 	display: flex;
 	flex-direction: row;
 	align-items: flex-start;
-	min-width: 260px;
+	min-width: min(260px, calc(100vw - 24px));
 	border: 1px solid rgba(32, 149, 224, .4);
+	overflow-wrap: anywhere;
 }
 
 .hover-panel-icon-col {

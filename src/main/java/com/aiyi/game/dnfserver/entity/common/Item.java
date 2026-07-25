@@ -84,7 +84,12 @@ public class Item {
             this.type = ItemType.other;
         }
         if (script.containsKey("[attach type]")){
-            this.attachType = AttachType.forType(script.getJSONArray("[attach type]").getStr(0));
+            try {
+                this.attachType = AttachType.forType(script.getJSONArray("[attach type]").getStr(0));
+            } catch (RuntimeException ignored) {
+                // Keep parsing newer PVF files that introduce an unknown attach type.
+                this.attachType = AttachType.trade;
+            }
         }else{
             this.attachType = AttachType.trade;
         }

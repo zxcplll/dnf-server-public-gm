@@ -3,6 +3,10 @@ server:
 spring:
   application:
     name: DNF Service Web Application
+  servlet:
+    multipart:
+      max-file-size: 1GB
+      max-request-size: 1GB
   datasource:
 #    url: jdbc:mysql://192.168.1.26:3000?useUnicode=true&characterEncoding=latin1&autoReconnect=true
     url: jdbc:mysql://100.71.173.105:3000?useUnicode=true&characterEncoding=utf8&autoReconnect=true

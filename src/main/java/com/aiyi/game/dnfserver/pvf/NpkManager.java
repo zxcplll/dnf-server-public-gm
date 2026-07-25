@@ -8,6 +8,11 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Locale;
 
 /**
  * NPK管理器
@@ -24,7 +29,11 @@ public class NpkManager {
         if (!file.exists()){
             logger.warn("Folder ImagePacks2 not found!");
         }else{
-            NpkCoder.initialize(file.getAbsolutePath());
+            try {
+                NpkCoder.initialize(file.getAbsolutePath());
+            } catch (Throwable e) {
+                logger.warn("NPK initialize failed, fallback to IconCache only: {}", e.getMessage());
+            }
         }
     }
 
@@ -39,11 +48,40 @@ public class NpkManager {
         try {
             textures = NpkCoder.loadImg(path).getTextures();
         }catch (Exception e){
-            return new byte[0];
+            return readCachedIcon(path, index);
         }
         if (null == textures || textures.length <= index){
-            return new byte[0];
+            return readCachedIcon(path, index);
         }
-        return textures[index].toPngBytes();
+        try {
+            byte[] imageBytes = textures[index].toPngBytes();
+            if (imageBytes != null && imageBytes.length > 0) {
+                return imageBytes;
+            }
+        } catch (Exception ignored) {
+        }
+        return readCachedIcon(path, index);
+    }
+
+    private byte[] readCachedIcon(String path, int index) {
+        try {
+            Path cachePath = new File("data/IconCache", iconCacheName(path, index)).toPath();
+            if (Files.isRegularFile(cachePath)) {
+                return Files.readAllBytes(cachePath);
+            }
+        } catch (Exception ignored) {
+        }
+        return new byte[0];
+    }
+
+    private String iconCacheName(String path, int index) throws Exception {
+        String key = (path == null ? "" : path.replace('\\', '/').toLowerCase(Locale.ROOT)) + "@" + index;
+        MessageDigest md5 = MessageDigest.getInstance("MD5");
+        byte[] digest = md5.digest(key.getBytes(StandardCharsets.UTF_8));
+        StringBuilder sb = new StringBuilder();
+        for (byte b : digest) {
+            sb.append(String.format("%02x", b & 0xff));
+        }
+        return sb + ".png";
     }
 }
