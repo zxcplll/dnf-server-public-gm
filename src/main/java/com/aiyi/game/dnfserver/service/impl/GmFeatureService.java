@@ -327,6 +327,8 @@ public class GmFeatureService {
                 reward.put("items", Collections.emptyList());
                 reward.put("gold", gold);
                 reward.put("ceraPoint", ceraPoint);
+                reward.put("directGold", true);
+                reward.put("directCera", true);
                 reward.put("message", "在线泡点奖励");
                 Date awardAt = new Date();
                 try {
@@ -367,6 +369,8 @@ public class GmFeatureService {
         List<Map<String, Object>> items = listValue(payload.get("items"));
         int gold = Math.max(0, intValue(payload.get("gold"), 0));
         int ceraPoint = Math.max(0, intValue(payload.get("ceraPoint"), 0));
+        boolean directGold = boolValue(payload.get("directGold"), false);
+        boolean directCera = boolValue(payload.get("directCera"), false);
         String message = stringValue(payload.get("message"), "GM奖励");
         int sent = 0;
         for (Integer characNo : recipients) {
@@ -375,16 +379,26 @@ public class GmFeatureService {
             }
             if (items.isEmpty()) {
                 if (gold > 0) {
-                    Postal postal = new Postal();
-                    postal.setSendCharacName(sender);
-                    postal.setReceiveCharacNo(String.valueOf(characNo));
-                    postal.setItemId(0L);
-                    postal.setAddInfo(1);
-                    postal.setGold(gold);
-                    postalService.sendMail(postal);
-                    sent++;
+                    if (directGold) {
+                        addGold(characNo, gold);
+                    } else {
+                        Postal postal = new Postal();
+                        postal.setSendCharacName(sender);
+                        postal.setReceiveCharacNo(String.valueOf(characNo));
+                        postal.setItemId(0L);
+                        postal.setAddInfo(1);
+                        postal.setGold(gold);
+                        postalService.sendMail(postal);
+                        sent++;
+                    }
                 }
-                if (ceraPoint > 0) addCeraPoint(characNo, ceraPoint);
+                if (ceraPoint > 0) {
+                    if (directCera) {
+                        addCera(characNo, ceraPoint);
+                    } else {
+                        addCeraPoint(characNo, ceraPoint);
+                    }
+                }
                 continue;
             }
             boolean first = true;
@@ -404,7 +418,13 @@ public class GmFeatureService {
                 sent++;
                 first = false;
             }
-            if (ceraPoint > 0) addCeraPoint(characNo, ceraPoint);
+            if (ceraPoint > 0) {
+                if (directCera) {
+                    addCera(characNo, ceraPoint);
+                } else {
+                    addCeraPoint(characNo, ceraPoint);
+                }
+            }
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("recipientCount", recipients.size());
@@ -438,6 +458,26 @@ public class GmFeatureService {
             jdbcTemplate.update("UPDATE taiwan_billing.cash_cera_point p JOIN taiwan_cain.charac_info c ON CAST(p.account AS UNSIGNED)=c.m_id SET p.cera_point=p.cera_point+?,p.mod_date=NOW() WHERE c.charac_no=?", amount, characNo);
         } catch (Exception e) {
             LOGGER.warn("Could not update cera point for {}: {}", characNo, e.getMessage());
+        }
+    }
+
+    private void addCera(int characNo, int amount) {
+        int updated = jdbcTemplate.update(
+                "UPDATE taiwan_billing.cash_cera p JOIN taiwan_cain.charac_info c ON CAST(p.account AS UNSIGNED)=c.m_id SET p.cera=LEAST(4294967295, p.cera+?),p.mod_date=NOW() WHERE c.charac_no=?",
+                amount,
+                characNo);
+        if (updated != 1) {
+            throw new IllegalStateException("Online reward cera was not updated for character " + characNo);
+        }
+    }
+
+    private void addGold(int characNo, int amount) {
+        int updated = jdbcTemplate.update(
+                "UPDATE taiwan_cain_2nd.inventory SET money=LEAST(4294967295, money+?) WHERE charac_no=?",
+                amount,
+                characNo);
+        if (updated != 1) {
+            throw new IllegalStateException("Online reward inventory was not updated for character " + characNo);
         }
     }
 
