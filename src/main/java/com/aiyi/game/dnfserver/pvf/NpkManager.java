@@ -64,6 +64,18 @@ public class NpkManager {
     }
 
     private byte[] readCachedIcon(String path, int index) {
+        byte[] imageBytes = readCachedIconExact(path, index);
+        if (imageBytes.length > 0) {
+            return imageBytes;
+        }
+        String normalizedPath = path == null ? "" : path.replace('\\', '/');
+        if (normalizedPath.startsWith("sprite/")) {
+            return readCachedIconExact(normalizedPath.substring("sprite/".length()), index);
+        }
+        return readCachedIconExact("sprite/" + normalizedPath, index);
+    }
+
+    private byte[] readCachedIconExact(String path, int index) {
         try {
             Path cachePath = new File("data/IconCache", iconCacheName(path, index)).toPath();
             if (Files.isRegularFile(cachePath)) {
