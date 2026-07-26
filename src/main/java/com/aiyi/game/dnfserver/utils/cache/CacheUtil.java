@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ConcurrentModificationException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -26,7 +25,7 @@ public class CacheUtil {
             return new Thread(r, "Cache-Local-Lock-Executor");
         }
     });
-    private static final Map<String, CacheItem> cacheItemMap = new HashMap<>();
+    private static final Map<String, CacheItem> cacheItemMap = new ConcurrentHashMap<>();
     static {
         new Thread(() -> {
             while (true){

@@ -6,6 +6,8 @@ import com.aiyi.game.dnfserver.conf.CommonAttr;
 import com.aiyi.game.dnfserver.dao.User;
 import org.springframework.util.StringUtils;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -29,11 +31,12 @@ public class UserTokenCacheUtil {
      * @param user
      *      用户对象
      */
-    public static void putUserCache(String token, User user){
-        clear(user.getId());
+    public static synchronized void putUserCache(String token, User user){
         // 缓存2小时
         CacheUtil.put(Key.as(CommonAttr.CACHE.LOGIN_KEY, token), user, TimeUnit.HOURS, expire);
-        CacheUtil.put(Key.as(CommonAttr.CACHE.USER_ID_TOKEN, String.valueOf(user.getId())), token, TimeUnit.HOURS, expire);
+        Set<String> tokens = getTokens(user.getId());
+        tokens.add(token);
+        CacheUtil.put(userTokenKey(user.getId()), tokens, TimeUnit.HOURS, expire);
     }
 
     /**
@@ -41,12 +44,12 @@ public class UserTokenCacheUtil {
      * @param userId
      *      对应的用户ID
      */
-    public static void clear(long userId) {
-        String token = CacheUtil.get(Key.as(CommonAttr.CACHE.USER_ID_TOKEN, String.valueOf(userId)), String.class);
-        if (null != token){
-            CacheUtil.expire(Key.as(CommonAttr.CACHE.USER_ID_TOKEN, String.valueOf(userId)));
+    public static synchronized void clear(long userId) {
+        Set<String> tokens = getTokens(userId);
+        for (String token : tokens) {
             CacheUtil.expire(Key.as(CommonAttr.CACHE.LOGIN_KEY, token));
         }
+        CacheUtil.expire(userTokenKey(userId));
     }
 
     /**
@@ -54,11 +57,18 @@ public class UserTokenCacheUtil {
      * @param user
      *      新的用户对象
      */
-    public static void updateCacheUser(User user) {
-        String token = CacheUtil.get(Key.as(CommonAttr.CACHE.USER_ID_TOKEN, String.valueOf(user.getId())), String.class);
-        if (null != token){
-            CacheUtil.put(Key.as(CommonAttr.CACHE.LOGIN_KEY, token), user, TimeUnit.HOURS, expire);
-            CacheUtil.put(Key.as(CommonAttr.CACHE.USER_ID_TOKEN, String.valueOf(user.getId())), token, TimeUnit.HOURS, expire);
+    public static synchronized void updateCacheUser(User user) {
+        Set<String> activeTokens = new HashSet<>();
+        for (String token : getTokens(user.getId())) {
+            if (null != getUser(token)) {
+                CacheUtil.put(Key.as(CommonAttr.CACHE.LOGIN_KEY, token), user, TimeUnit.HOURS, expire);
+                activeTokens.add(token);
+            }
+        }
+        if (activeTokens.isEmpty()) {
+            CacheUtil.expire(userTokenKey(user.getId()));
+        } else {
+            CacheUtil.put(userTokenKey(user.getId()), activeTokens, TimeUnit.HOURS, expire);
         }
     }
 
@@ -73,5 +83,24 @@ public class UserTokenCacheUtil {
             return null;
         }
         return CacheUtil.get(Key.as(CommonAttr.CACHE.LOGIN_KEY, token), User.class);
+    }
+
+    private static Set<String> getTokens(long userId) {
+        Object cachedTokens = CacheUtil.get(userTokenKey(userId), Object.class);
+        Set<String> tokens = new HashSet<>();
+        if (cachedTokens instanceof String) {
+            tokens.add((String) cachedTokens);
+        } else if (cachedTokens instanceof Iterable<?>) {
+            for (Object cachedToken : (Iterable<?>) cachedTokens) {
+                if (cachedToken instanceof String) {
+                    tokens.add((String) cachedToken);
+                }
+            }
+        }
+        return tokens;
+    }
+
+    private static Key userTokenKey(long userId) {
+        return Key.as(CommonAttr.CACHE.USER_ID_TOKEN, String.valueOf(userId));
     }
 }
