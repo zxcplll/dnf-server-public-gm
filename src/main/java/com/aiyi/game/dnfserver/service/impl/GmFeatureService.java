@@ -96,11 +96,11 @@ public class GmFeatureService {
         Map<String, Object> overview = new LinkedHashMap<>();
         overview.put("totalAccounts", scalar("SELECT COUNT(*) FROM d_taiwan.accounts"));
         overview.put("todayRegistrations", scalar("SELECT COUNT(*) FROM taiwan_cain.charac_info WHERE create_time >= CURDATE()"));
-        overview.put("online", querySafe("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid " +
+        overview.put("online", queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid " +
                 "FROM taiwan_cain.charac_info c WHERE c.delete_flag=0 AND (" + onlineExists("c.m_id", "taiwan_login.login_account_1") +
                 " OR " + onlineExists("c.m_id", "taiwan_login.login_account_2") +
                 " OR " + onlineExists("c.m_id", "taiwan_login.login_account_3") + ") ORDER BY c.charac_no"));
-        overview.put("todayActive", querySafe("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid " +
+        overview.put("todayActive", queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid " +
                 "FROM taiwan_cain.charac_info c WHERE c.last_play_time >= CURDATE() AND c.delete_flag=0 ORDER BY c.last_play_time DESC"));
         result.put("overview", overview);
         return result;
@@ -601,6 +601,17 @@ public class GmFeatureService {
 
     private List<Map<String, Object>> querySafe(String sql) {
         try { return jdbcTemplate.queryForList(sql); } catch (Exception e) { LOGGER.warn("GM query failed: {}", e.getMessage()); return new ArrayList<>(); }
+    }
+
+    private List<Map<String, Object>> queryCharacterNames(String sql) {
+        List<Map<String, Object>> rows = querySafe(sql);
+        for (Map<String, Object> row : rows) {
+            Object name = row.get("name");
+            if (name != null) {
+                row.put("name", ChinaseUtil.toSimple(String.valueOf(name)));
+            }
+        }
+        return rows;
     }
 
     private Map<String, Object> first(List<Map<String, Object>> list) { return list.isEmpty() ? new LinkedHashMap<String, Object>() : list.get(0); }

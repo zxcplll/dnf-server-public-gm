@@ -4,10 +4,13 @@ import com.aiyi.core.beans.PO;
 import com.alibaba.fastjson.JSON;
 import com.github.houbb.opencc4j.util.ZhConverterUtil;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -43,7 +46,7 @@ public class ChinaseUtil {
      * @param str
      */
     public static String toSimple(String str){
-        return ZhConverterUtil.toSimple(convertCharset(str));
+        return ZhConverterUtil.toSimple(decodeUtf8Mojibake(str));
     }
 
     /**
@@ -138,6 +141,26 @@ public class ChinaseUtil {
             return new String(buffer, StandardCharsets.UTF_8);
         }
         return null;
+    }
+
+    private static String decodeUtf8Mojibake(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        try {
+            ByteBuffer bytes = Charset.forName("CP1252").newEncoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .encode(CharBuffer.wrap(value));
+            String decoded = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(bytes)
+                    .toString();
+            return decoded.equals(value) ? value : decoded;
+        } catch (CharacterCodingException ignored) {
+            return value;
+        }
     }
 
     public static String convertCharsetUTF8(String s)
