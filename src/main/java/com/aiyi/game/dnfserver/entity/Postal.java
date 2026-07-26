@@ -68,6 +68,9 @@ public class Postal extends PO {
     @FieldName(name = "add_info")
     private int addInfo = 1;
 
+    @FieldName(name = "endurance")
+    private int endurance;
+
     /**
      * 物品强化等级
      */
@@ -140,6 +143,9 @@ public class Postal extends PO {
     @TempField
     private String letterText;
 
+    @TempField
+    private boolean highestGrade;
+
 
     public long getPostalId() {
         return postalId;
@@ -195,6 +201,14 @@ public class Postal extends PO {
 
     public void setAddInfo(int addInfo) {
         this.addInfo = addInfo;
+    }
+
+    public int getEndurance() {
+        return endurance;
+    }
+
+    public void setEndurance(int endurance) {
+        this.endurance = endurance;
     }
 
     public int getUpgrade() {
@@ -323,6 +337,14 @@ public class Postal extends PO {
 
     public void setLetterText(String letterText) {
         this.letterText = letterText;
+    }
+
+    public boolean isHighestGrade() {
+        return highestGrade;
+    }
+
+    public void setHighestGrade(boolean highestGrade) {
+        this.highestGrade = highestGrade;
     }
 
     /**

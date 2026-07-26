@@ -9,6 +9,9 @@ import com.aiyi.core.sql.where.C;
 import com.aiyi.game.dnfserver.dao.AccountDao;
 import com.aiyi.game.dnfserver.dao.PostalDao;
 import com.aiyi.game.dnfserver.entity.Postal;
+import com.aiyi.game.dnfserver.entity.common.Item;
+import com.aiyi.game.dnfserver.entity.common.ItemType;
+import com.aiyi.game.dnfserver.pvf.PvfManager;
 import com.aiyi.game.dnfserver.service.PostalService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -26,11 +29,17 @@ import java.util.Date;
 @Service
 public class PostalServiceImpl implements PostalService {
 
+    /** postal.endurance uses the 0-100 equipment quality percentage in the 86 schema. */
+    private static final int TOP_QUALITY_VALUE = 100;
+
     @Resource
     private PostalDao postalDao;
 
     @Resource
     private AccountDao accountDao;
+
+    @Resource
+    private PvfManager pvfManager;
 
     @Override
     public ResultPage<Postal> list(String account, Date start,
@@ -55,9 +64,24 @@ public class PostalServiceImpl implements PostalService {
 
     @Override
     public void sendMail(Postal postal) {
+        applyHighestGrade(postal);
         if (StringUtils.isEmpty(postal.getSendCharacName())) {
             postal.setSendCharacName("GM后台");
         }
         postalDao.add(postal);
+    }
+
+    private void applyHighestGrade(Postal postal) {
+        if (postal == null || !postal.isHighestGrade() || postal.getItemId() <= 0 || pvfManager == null) {
+            return;
+        }
+        try {
+            Item item = pvfManager.findItem((int) postal.getItemId());
+            if (item != null && item.getType() == ItemType.equipment) {
+                postal.setEndurance(TOP_QUALITY_VALUE);
+            }
+        } catch (RuntimeException ignored) {
+            // A stale PVF must not prevent ordinary mail from being sent.
+        }
     }
 }

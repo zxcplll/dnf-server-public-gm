@@ -11,11 +11,12 @@ type RewardItem = {
   upgrade: number;
   separateUpgrade: number;
   sealFlag: boolean;
+  highestGrade: boolean;
   amplifyOption: number;
   amplifyValue: number;
 };
 
-const emptyItem = (): RewardItem => ({ item: null, itemId: 0, quantity: 1, upgrade: 0, separateUpgrade: 0, sealFlag: false, amplifyOption: 0, amplifyValue: 0 });
+const emptyItem = (): RewardItem => ({ item: null, itemId: 0, quantity: 1, upgrade: 0, separateUpgrade: 0, sealFlag: false, highestGrade: false, amplifyOption: 0, amplifyValue: 0 });
 const form = reactive({
   targetType: 'ONLINE',
   characterIds: [] as number[],
@@ -32,6 +33,16 @@ const characterOptions = () => characters.value.map(item => ({
   label: `${item.characName || item.name || item.characNo}（${item.characNo}）`,
   value: Number(item.characNo || item.id)
 }));
+
+const isEquipmentItem = (item: any | null) => {
+  const type = String(item?.type || '').toLowerCase();
+  return type === 'equipment' || type.includes('equipment') || Boolean(item?.equipmentType || item?.equipmentTypeStr);
+};
+
+const onItemChange = (item: RewardItem, value: any | null) => {
+  item.itemId = Number(value?.id || 0);
+  if (!isEquipmentItem(value)) item.highestGrade = false;
+};
 
 const loadCharacters = async () => {
   characterLoading.value = true;
@@ -66,6 +77,7 @@ const submit = async () => {
     upgrade: Number(item.upgrade || 0),
     separateUpgrade: Number(item.separateUpgrade || 0),
     sealFlag: Boolean(item.sealFlag),
+    highestGrade: Boolean(item.highestGrade && isEquipmentItem(item.item)),
     amplifyOption: Number(item.amplifyOption || 0),
     amplifyValue: Number(item.amplifyValue || 0)
   }));
@@ -120,15 +132,16 @@ onMounted(loadCharacters);
         <div class="items-heading"><strong>发放物品</strong><a-button size="small" @click="addItem">添加物品</a-button></div>
         <div class="items-help">
           <icon-info-circle />
-          <span>数量为邮件中的物品数量；强化和锻造填写等级；增幅属性与数值用于红字属性；封装表示物品是否以封装状态发送。</span>
+          <span>数量为邮件中的物品数量；强化和锻造填写等级；最高品级仅对装备生效，按 100% 品质发送。</span>
         </div>
         <div v-for="(item, index) in form.items" :key="index" class="item-editor">
-          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="300" @change="(value) => item.itemId = Number(value?.id || 0)" /></div>
+          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="300" @change="(value) => onItemChange(item, value)" /></div>
           <div class="item-field"><span class="field-label">数量</span><a-input-number v-model="item.quantity" :min="1" :max="100000" /></div>
           <div class="item-field"><span class="field-label">强化等级</span><a-input-number v-model="item.upgrade" :min="0" :max="31" /></div>
           <div class="item-field"><span class="field-label">锻造等级</span><a-input-number v-model="item.separateUpgrade" :min="0" :max="31" /></div>
           <div class="item-field"><span class="field-label">增幅属性</span><a-select v-model="item.amplifyOption" style="width: 120px"><a-option :value="0">无</a-option><a-option :value="1">体力</a-option><a-option :value="2">精神</a-option><a-option :value="3">力量</a-option><a-option :value="4">智力</a-option></a-select></div>
           <div class="item-field"><span class="field-label">增幅数值</span><a-input-number v-model="item.amplifyValue" :min="0" :max="65535" /></div>
+          <div class="item-field quality-field"><span class="field-label">品质</span><a-checkbox v-model="item.highestGrade" :disabled="!isEquipmentItem(item.item)">最高品级</a-checkbox></div>
           <div class="item-field seal-field"><span class="field-label">封装状态</span><a-switch v-model="item.sealFlag" checked-text="封装" unchecked-text="不封装" /></div>
           <a-button status="danger" size="small" :disabled="form.items.length === 1" @click="removeItem(index)">移除</a-button>
         </div>
@@ -147,6 +160,7 @@ onMounted(loadCharacters);
 .item-field { display: flex; flex-direction: column; gap: 5px; }
 .field-label { color: var(--color-text-2); font-size: 12px; line-height: 1; white-space: nowrap; }
 .item-editor :deep(.arco-input-number), .item-editor :deep(.arco-select) { width: 112px; }
+.quality-field { min-width: 92px; }
 .seal-field { min-width: 92px; }
 .submit-row { display: flex; justify-content: flex-end; margin-top: 18px; }
 @media (max-width: 900px) { .reward-page { padding: 8px; } }

@@ -757,6 +757,30 @@ onMounted(() => {
 	height: 100%;
 }
 
+@media (max-width: 640px) {
+	.panel-left {
+		width: 140px;
+	}
+
+	.panel-right {
+		max-width: calc(100% - 140px);
+		padding: 12px;
+	}
+
+	.item-card {
+		padding: 8px;
+	}
+
+	.item-icon {
+		margin-right: 8px;
+	}
+
+	.item-id {
+		min-width: 42px;
+		font-size: 11px;
+	}
+}
+
 .category-title {
 	font-size: 12px;
 	color: #9ca3af;

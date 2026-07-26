@@ -3,6 +3,7 @@ package com.aiyi.game.dnfserver.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.aiyi.game.dnfserver.entity.Postal;
 import com.aiyi.game.dnfserver.entity.common.Item;
+import com.aiyi.game.dnfserver.entity.common.ItemType;
 import com.aiyi.game.dnfserver.pvf.PvfCache;
 import com.aiyi.game.dnfserver.pvf.PvfManager;
 import com.aiyi.game.dnfserver.service.PostalService;
@@ -411,6 +412,17 @@ public class GmFeatureService {
                 postal.setUpgrade(intValue(item.get("upgrade"), 0));
                 postal.setSeperateUpgrade(intValue(item.get("separateUpgrade"), intValue(item.get("seperateUpgrade"), 0)));
                 postal.setSealFlag(boolValue(item.get("sealFlag"), false));
+                boolean highestGrade = boolValue(item.get("highestGrade"), false);
+                postal.setHighestGrade(highestGrade);
+                // The 86 mail schema stores equipment quality in endurance (0-100).
+                boolean equipment = false;
+                try {
+                    Item itemTemplate = pvfManager == null ? null : pvfManager.findItem((int) postal.getItemId());
+                    equipment = itemTemplate != null && itemTemplate.getType() == ItemType.equipment;
+                } catch (RuntimeException ignored) {
+                    // A stale PVF should not prevent the rest of a reward batch from sending.
+                }
+                postal.setEndurance(highestGrade && equipment ? 100 : 0);
                 postal.setAmplifyOption(intValue(item.get("amplifyOption"), 0));
                 postal.setAmplifyValue(intValue(item.get("amplifyValue"), 0));
                 postal.setGold(first ? gold : 0);

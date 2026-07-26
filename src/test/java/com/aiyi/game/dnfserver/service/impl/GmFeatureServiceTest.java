@@ -1,6 +1,13 @@
 package com.aiyi.game.dnfserver.service.impl;
 
 import com.aiyi.game.dnfserver.service.PostalService;
+import com.aiyi.game.dnfserver.entity.Postal;
+import com.aiyi.game.dnfserver.entity.common.ItemType;
+import com.aiyi.game.dnfserver.entity.equipment.Equipment;
+import com.aiyi.game.dnfserver.entity.stackable.Stackable;
+import com.aiyi.game.dnfserver.dao.PostalDao;
+import com.aiyi.game.dnfserver.dao.AccountDao;
+import com.aiyi.game.dnfserver.pvf.PvfManager;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -72,5 +79,66 @@ public class GmFeatureServiceTest {
                 1);
         verifyZeroInteractions(postalService);
         assertEquals(0, result.get("mailCount"));
+    }
+
+    @Test
+    public void carriesHighestGradeFlagToRewardMail() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        PostalService postalService = mock(PostalService.class);
+        PvfManager pvfManager = mock(PvfManager.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        ReflectionTestUtils.setField(service, "postalService", postalService);
+        ReflectionTestUtils.setField(service, "pvfManager", pvfManager);
+        Equipment equipment = new Equipment();
+        equipment.setType(ItemType.equipment);
+        when(pvfManager.findItem(1001)).thenReturn(equipment);
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("itemId", 1001);
+        item.put("quantity", 1);
+        item.put("highestGrade", true);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("targetType", "CHARACTERS");
+        payload.put("characterIds", Arrays.asList(1));
+        payload.put("items", Arrays.asList(item));
+
+        service.dispatchReward(payload, "gm");
+
+        org.mockito.ArgumentCaptor<Postal> captor = org.mockito.ArgumentCaptor.forClass(Postal.class);
+        verify(postalService).sendMail(captor.capture());
+        assertEquals(true, captor.getValue().isHighestGrade());
+        assertEquals(100, captor.getValue().getEndurance());
+        assertEquals(1, captor.getValue().getAddInfo());
+    }
+
+    @Test
+    public void postalServiceWritesTopQualityValueOnlyForEquipment() {
+        PostalDao postalDao = mock(PostalDao.class);
+        AccountDao accountDao = mock(AccountDao.class);
+        PvfManager pvfManager = mock(PvfManager.class);
+        PostalServiceImpl service = new PostalServiceImpl();
+        ReflectionTestUtils.setField(service, "postalDao", postalDao);
+        ReflectionTestUtils.setField(service, "accountDao", accountDao);
+        ReflectionTestUtils.setField(service, "pvfManager", pvfManager);
+
+        Equipment equipment = new Equipment();
+        equipment.setType(ItemType.equipment);
+        Stackable stackable = new Stackable();
+        stackable.setType(ItemType.stackable);
+
+        Postal equipmentMail = new Postal();
+        equipmentMail.setItemId(1001);
+        equipmentMail.setHighestGrade(true);
+        when(pvfManager.findItem(1001)).thenReturn(equipment);
+        service.sendMail(equipmentMail);
+        assertEquals(100, equipmentMail.getEndurance());
+
+        Postal stackableMail = new Postal();
+        stackableMail.setItemId(2001);
+        stackableMail.setHighestGrade(true);
+        when(pvfManager.findItem(2001)).thenReturn(stackable);
+        service.sendMail(stackableMail);
+        assertEquals(0, stackableMail.getEndurance());
     }
 }

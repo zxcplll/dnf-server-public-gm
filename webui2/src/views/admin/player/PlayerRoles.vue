@@ -45,6 +45,7 @@ const mailForm = ref({
 	upgrade: 0,
 	seperateUpgrade: 0,
 	sealFlag: false,
+	highestGrade: false,
 	amplifyOption: undefined as number | undefined,
 	amplifyValue: 0,
 	gold: 0
@@ -242,11 +243,17 @@ const openSendMail = (record: any) => {
 		upgrade: 0,
 		seperateUpgrade: 0,
 		sealFlag: false,
+		highestGrade: false,
 		amplifyOption: undefined,
 		amplifyValue: 0,
 		gold: 0
 	};
 	sendMailOption.value.open = true;
+};
+
+const isEquipmentItem = (item: any | null) => {
+	const type = String(item?.type || '').toLowerCase();
+	return type === 'equipment' || type.includes('equipment') || Boolean(item?.equipmentType || item?.equipmentTypeStr);
 };
 
 const submitSendMail = async () => {
@@ -266,6 +273,7 @@ const submitSendMail = async () => {
 		upgrade: mailForm.value.upgrade,
 		seperateUpgrade: mailForm.value.seperateUpgrade,
 		sealFlag: mailForm.value.sealFlag,
+		highestGrade: Boolean(mailForm.value.highestGrade && isEquipmentItem(mailForm.value.item)),
 		amplifyOption: mailForm.value.amplifyOption ?? 0,
 		amplifyValue: mailForm.value.amplifyValue,
 		gold: mailForm.value.gold
@@ -394,7 +402,7 @@ onMounted(() => {
 		<a-modal
 			v-model:visible="editOption.open"
 			title="编辑角色属性"
-			:width="820"
+			:width="'min(820px, calc(100vw - 24px))'"
 			:mask-closable="false"
 			@ok="submitEdit"
 			@cancel="editOption.open = false"
@@ -491,7 +499,7 @@ onMounted(() => {
 		<a-modal
 			v-model:visible="sendMailOption.open"
 			:title="`发送邮件到: ${sendMailOption.receiveCharacName}`"
-			:width="720"
+			:width="'min(720px, calc(100vw - 24px))'"
 			:mask-closable="false"
 			@ok="submitSendMail"
 			@cancel="sendMailOption.open = false"
@@ -551,6 +559,14 @@ onMounted(() => {
 							</div>
 						</a-form-item>
 					</a-col>
+					<a-col :span="24">
+						<a-form-item label="品质">
+							<div class="mail-quality-row">
+								<a-checkbox v-model="mailForm.highestGrade" :disabled="!isEquipmentItem(mailForm.item)">最高品级</a-checkbox>
+								<span class="mail-quality-tip">仅装备生效，按 100% 品质发送</span>
+							</div>
+						</a-form-item>
+					</a-col>
 				</a-row>
 			</a-form>
 		</a-modal>
@@ -585,6 +601,34 @@ onMounted(() => {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+}
+
+.mail-quality-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.mail-quality-tip {
+	color: var(--color-text-3);
+	font-size: 12px;
+}
+
+@media (max-width: 600px) {
+	.mail-item-row {
+		align-items: stretch;
+		flex-wrap: wrap;
+	}
+
+	.mail-item-row > :deep(.arco-form-item) {
+		width: 100% !important;
+	}
+
+	.mail-quality-row,
+	.mail-seal-row {
+		align-items: flex-start;
+		flex-wrap: wrap;
+	}
 }
 
 .mail-tip {
