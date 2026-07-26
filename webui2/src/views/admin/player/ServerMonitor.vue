@@ -22,7 +22,8 @@ const charts = [
   { key: 'networkPercent' as MetricKey, title: '网络占用率', color: '#722ed1' }
 ];
 
-const loading = ref(false);
+const loading = ref(true);
+const hasLoaded = ref(false);
 const data = ref<any>({ current: {}, history: [], overview: {} });
 const hover = ref<{ point: ChartPoint; key: MetricKey } | null>(null);
 let timer: number | undefined;
@@ -31,6 +32,7 @@ const load = async () => {
   loading.value = true;
   try {
     data.value = (await Request.get<any>('/api/v1/gm/monitor')).data || {};
+    hasLoaded.value = true;
   } catch (error: any) {
     Message.error(error?.message || '监控加载失败');
   } finally {
@@ -50,6 +52,12 @@ const online = computed(() => data.value.overview?.online || []);
 const todayActive = computed(() => data.value.overview?.todayActive || []);
 
 const metricValue = (row: any, key: MetricKey) => Math.min(100, Math.max(0, Number(row?.[key] || 0)));
+const averageValue = (key: MetricKey) => {
+  const rows = history.value;
+  if (!rows.length) return metricValue(current.value, key);
+  const total = rows.reduce((sum: number, row: any) => sum + metricValue(row, key), 0);
+  return total / rows.length;
+};
 const series = (key: MetricKey): ChartPoint[] => {
   const rows = history.value;
   if (!rows.length) return [];
@@ -95,13 +103,13 @@ const lastUpdated = computed(() => formatTime(current.value.timestamp));
       <a-tag color="arcoblue">更新于 {{ lastUpdated }}</a-tag>
     </div>
 
-    <a-spin :loading="loading" style="width: 100%">
+  <a-spin :loading="loading && !hasLoaded" style="width: 100%">
       <a-space direction="vertical" fill size="large">
         <a-row :gutter="16">
-          <a-col :span="6"><a-card><a-statistic title="CPU 使用率" :value="current.cpu || 0" :precision="1" suffix="%" /></a-card></a-col>
-          <a-col :span="6"><a-card><a-statistic title="内存使用率" :value="current.memoryPercent || 0" :precision="1" suffix="%" /></a-card></a-col>
-          <a-col :span="6"><a-card><a-statistic title="存储使用率" :value="current.storagePercent || 0" :precision="1" suffix="%" /></a-card></a-col>
-          <a-col :span="6"><a-card><a-statistic title="网络占用率" :value="current.networkPercent || 0" :precision="1" suffix="%" /><div class="network-detail">{{ networkDetail }}</div></a-card></a-col>
+          <a-col :span="6"><a-card class="metric-card"><div class="metric-card-title">CPU 使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'cpu').toFixed(1) }}% <span>/</span> {{ averageValue('cpu').toFixed(1) }}%</div></a-card></a-col>
+          <a-col :span="6"><a-card class="metric-card"><div class="metric-card-title">内存使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'memoryPercent').toFixed(1) }}% <span>/</span> {{ averageValue('memoryPercent').toFixed(1) }}%</div></a-card></a-col>
+          <a-col :span="6"><a-card class="metric-card"><div class="metric-card-title">存储使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'storagePercent').toFixed(1) }}% <span>/</span> {{ averageValue('storagePercent').toFixed(1) }}%</div></a-card></a-col>
+          <a-col :span="6"><a-card class="metric-card"><div class="metric-card-title">网络使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'networkPercent').toFixed(1) }}% <span>/</span> {{ averageValue('networkPercent').toFixed(1) }}%</div><div class="network-detail">{{ networkDetail }}</div></a-card></a-col>
         </a-row>
 
         <a-row :gutter="16">
@@ -150,6 +158,10 @@ const lastUpdated = computed(() => formatTime(current.value.timestamp));
 .monitor-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .monitor-heading h2 { margin: 0 0 4px; color: var(--color-text-1); font-size: 20px; }
 .monitor-heading span { color: var(--color-text-3); font-size: 13px; }
+.metric-card { min-height: 116px; }
+.metric-card-title { color: var(--color-text-2); font-size: 13px; line-height: 1.5; }
+.metric-card-value { margin-top: 10px; color: var(--color-text-1); font-size: 27px; line-height: 1.1; white-space: nowrap; }
+.metric-card-value span { margin: 0 4px; color: var(--color-text-3); font-size: 20px; }
 .network-detail { margin-top: 6px; color: var(--color-text-3); font-size: 12px; }
 .chart-shell { position: relative; min-height: 240px; overflow: hidden; }
 .metric-chart { display: block; width: 100%; height: 240px; }

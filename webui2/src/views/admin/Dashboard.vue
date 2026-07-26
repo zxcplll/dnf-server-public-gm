@@ -3,9 +3,9 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { Message } from '@arco-design/web-vue';
 import Request from '../../api/Request';
 import router from '../../router';
-import ServerMonitor from './player/ServerMonitor.vue';
 
-const loading = ref(false);
+const loading = ref(true);
+const hasLoaded = ref(false);
 const data = ref<any>({ overview: {} });
 let timer: number | undefined;
 
@@ -13,20 +13,21 @@ const load = async () => {
   loading.value = true;
   try {
     data.value = (await Request.get<any>('/api/v1/gm/monitor')).data || {};
+    hasLoaded.value = true;
   } catch (error: any) {
     Message.error(error?.message || '首页数据加载失败');
   } finally {
     loading.value = false;
   }
 };
-const goMonitor = () => document.getElementById('server-monitor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const goMonitor = () => router.push('/admin/monitor');
 const goReward = () => router.push('/admin/reward/global');
 onMounted(() => { load(); timer = window.setInterval(load, 10000); });
 onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
 </script>
 
 <template>
-  <a-spin :loading="loading" style="width: 100%">
+  <a-spin :loading="loading && !hasLoaded" style="width: 100%">
     <div class="dashboard-view">
       <section class="welcome-panel">
         <div>
@@ -48,9 +49,6 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
         <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot online"></span>当前在线</span><a-badge :count="(data.overview?.online || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.online || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar online-avatar">{{ String(row.name || '?').slice(0, 1) }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.online || []).length" description="当前没有在线角色" /></div><template #actions><a-button type="text" size="small" @click="goMonitor">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
         <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot today"></span>今日上线</span><a-badge :count="(data.overview?.todayActive || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.todayActive || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar today-avatar">{{ String(row.name || '?').slice(0, 1) }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.todayActive || []).length" description="今日还没有上线角色" /></div><template #actions><a-button type="text" size="small" @click="goMonitor">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
       </a-row>
-      <section id="server-monitor" class="monitor-section">
-        <ServerMonitor />
-      </section>
     </div>
   </a-spin>
 </template>

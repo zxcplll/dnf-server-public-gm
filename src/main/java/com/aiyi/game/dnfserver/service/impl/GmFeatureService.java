@@ -41,6 +41,7 @@ public class GmFeatureService {
     private PvfManager pvfManager;
 
     private final Deque<Map<String, Object>> metricHistory = new ConcurrentLinkedDeque<>();
+    private final Object onlineRewardLock = new Object();
     private long lastRx;
     private long lastTx;
     private long lastNetworkAt;
@@ -60,6 +61,19 @@ public class GmFeatureService {
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS dnf_service.gm_backup_schedule (" +
                     "type VARCHAR(12) PRIMARY KEY, interval_minutes INT NOT NULL DEFAULT 1440, enabled TINYINT NOT NULL DEFAULT 0, " +
                     "retain_count INT NOT NULL DEFAULT 10, next_run_at DATETIME NULL, updated_at DATETIME NOT NULL)");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS dnf_service.gm_online_reward_setting (" +
+                    "id TINYINT PRIMARY KEY, enabled TINYINT NOT NULL DEFAULT 0, interval_minutes INT NOT NULL DEFAULT 60, " +
+                    "cera_point INT NOT NULL DEFAULT 0, gold INT NOT NULL DEFAULT 0, last_run_at DATETIME NULL, updated_at DATETIME NOT NULL)");
+            jdbcTemplate.execute("INSERT INTO dnf_service.gm_online_reward_setting(id,enabled,interval_minutes,cera_point,gold,updated_at) " +
+                    "VALUES(1,0,60,0,0,NOW()) ON DUPLICATE KEY UPDATE id=id");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS dnf_service.gm_online_reward_progress (" +
+                    "charac_no INT PRIMARY KEY, charac_name VARCHAR(80) NULL, online_since DATETIME NULL, " +
+                    "last_seen_at DATETIME NULL, last_award_at DATETIME NULL, award_count INT NOT NULL DEFAULT 0)");
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS dnf_service.gm_online_reward_log (" +
+                    "id BIGINT PRIMARY KEY AUTO_INCREMENT, charac_no INT NOT NULL, charac_name VARCHAR(80) NULL, " +
+                    "interval_minutes INT NOT NULL, cera_point INT NOT NULL DEFAULT 0, gold INT NOT NULL DEFAULT 0, " +
+                    "awarded_at DATETIME NOT NULL, status VARCHAR(20) NOT NULL, message VARCHAR(500) NULL, " +
+                    "INDEX idx_gm_online_reward_log_time(awarded_at), INDEX idx_gm_online_reward_log_char(charac_no))");
         } catch (Exception e) {
             LOGGER.warn("GM feature tables were not initialized: {}", e.getMessage());
         }
@@ -69,6 +83,7 @@ public class GmFeatureService {
     public void tick() {
         recordMetrics();
         dispatchDueTasks();
+        processOnlineReward();
         processBackupSchedules();
     }
 
@@ -218,6 +233,118 @@ public class GmFeatureService {
         return dispatchReward(payload, "GM后台");
     }
 
+    /** Returns the singleton online play reward configuration and current progress. */
+    public Map<String, Object> getOnlineReward() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Object> settings = first(querySafe("SELECT id,enabled,interval_minutes,cera_point,gold,last_run_at,updated_at " +
+                "FROM dnf_service.gm_online_reward_setting WHERE id=1"));
+        result.put("enabled", intValue(settings.get("enabled"), 0) != 0);
+        result.put("intervalMinutes", Math.max(1, intValue(settings.get("interval_minutes"), 60)));
+        result.put("ceraPoint", Math.max(0, intValue(settings.get("cera_point"), 0)));
+        result.put("gold", Math.max(0, intValue(settings.get("gold"), 0)));
+        result.put("lastRunAt", settings.get("last_run_at"));
+        result.put("updatedAt", settings.get("updated_at"));
+        result.put("onlineCount", scalar("SELECT COUNT(*) FROM taiwan_cain.charac_info c WHERE c.delete_flag=0 AND (" +
+                onlineExists("c.m_id", "taiwan_login.login_account_1") + " OR " +
+                onlineExists("c.m_id", "taiwan_login.login_account_2") + " OR " +
+                onlineExists("c.m_id", "taiwan_login.login_account_3") + ")"));
+        result.put("progress", querySafe("SELECT charac_no AS characNo,charac_name AS characName,online_since AS onlineSince," +
+                "last_seen_at AS lastSeenAt,last_award_at AS lastAwardAt,award_count AS awardCount " +
+                "FROM dnf_service.gm_online_reward_progress WHERE online_since IS NOT NULL ORDER BY online_since"));
+        return result;
+    }
+
+    /** Saves the singleton online play reward configuration. */
+    public Map<String, Object> saveOnlineReward(Map<String, Object> payload) {
+        int interval = Math.max(1, Math.min(10080, intValue(payload.get("intervalMinutes"), 60)));
+        int ceraPoint = Math.max(0, intValue(payload.get("ceraPoint"), 0));
+        int gold = Math.max(0, intValue(payload.get("gold"), 0));
+        boolean enabled = boolValue(payload.get("enabled"), false);
+        jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_setting SET enabled=?,interval_minutes=?,cera_point=?,gold=?,updated_at=? WHERE id=1",
+                enabled ? 1 : 0, interval, ceraPoint, gold, new Date());
+        if (!enabled) {
+            jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_progress SET online_since=NULL,last_seen_at=NULL,last_award_at=NULL");
+        }
+        Map<String, Object> result = getOnlineReward();
+        result.put("saved", true);
+        return result;
+    }
+
+    public List<Map<String, Object>> listOnlineRewardLogs(int page, int pageSize) {
+        page = Math.max(1, page);
+        pageSize = Math.min(100, Math.max(1, pageSize));
+        return querySafe("SELECT id,charac_no AS characNo,charac_name AS characName,interval_minutes AS intervalMinutes," +
+                "cera_point AS ceraPoint,gold,awarded_at AS awardedAt,status,message " +
+                "FROM dnf_service.gm_online_reward_log ORDER BY id DESC LIMIT " + pageSize + " OFFSET " + ((page - 1) * pageSize));
+    }
+
+    /**
+     * Pays each continuously-online character once per configured interval.
+     * The progress table makes a reconnect start a new continuous-online period.
+     */
+    private void processOnlineReward() {
+        synchronized (onlineRewardLock) {
+            Map<String, Object> settings = first(querySafe("SELECT enabled,interval_minutes,cera_point,gold FROM dnf_service.gm_online_reward_setting WHERE id=1"));
+            if (settings.isEmpty() || intValue(settings.get("enabled"), 0) == 0) return;
+            int interval = Math.max(1, Math.min(10080, intValue(settings.get("interval_minutes"), 60)));
+            int ceraPoint = Math.max(0, intValue(settings.get("cera_point"), 0));
+            int gold = Math.max(0, intValue(settings.get("gold"), 0));
+            if (ceraPoint == 0 && gold == 0) return;
+            Date now = new Date();
+            Date stale = new Date(now.getTime() - 45000L);
+            try {
+                jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_progress SET online_since=NULL,last_seen_at=NULL " +
+                        "WHERE last_seen_at IS NOT NULL AND last_seen_at < ?", stale);
+            } catch (Exception e) {
+                LOGGER.warn("Could not reset offline reward progress: {}", e.getMessage());
+            }
+            List<Map<String, Object>> online = querySafe("SELECT c.charac_no AS characNo,c.charac_name AS characName,c.m_id AS uid " +
+                    "FROM taiwan_cain.charac_info c WHERE c.delete_flag=0 AND (" +
+                    onlineExists("c.m_id", "taiwan_login.login_account_1") + " OR " +
+                    onlineExists("c.m_id", "taiwan_login.login_account_2") + " OR " +
+                    onlineExists("c.m_id", "taiwan_login.login_account_3") + ") ORDER BY c.charac_no");
+            for (Map<String, Object> player : online) {
+                int characNo = intValue(player.get("characNo"), intValue(player.get("CHARACNO"), intValue(player.get("charac_no"), 0)));
+                if (characNo <= 0) continue;
+                String characName = ChinaseUtil.toSimple(stringValue(player.get("characName"), stringValue(player.get("charac_name"), "")));
+                Map<String, Object> progress = first(querySafe("SELECT online_since,last_award_at FROM dnf_service.gm_online_reward_progress WHERE charac_no=" + characNo));
+                Date onlineSince = parseDate(progress.get("online_since"));
+                Date lastAward = parseDate(progress.get("last_award_at"));
+                if (onlineSince == null) {
+                    onlineSince = now;
+                    jdbcTemplate.update("INSERT INTO dnf_service.gm_online_reward_progress(charac_no,charac_name,online_since,last_seen_at,award_count) VALUES(?,?,?,?,0) " +
+                            "ON DUPLICATE KEY UPDATE charac_name=VALUES(charac_name),online_since=VALUES(online_since),last_seen_at=VALUES(last_seen_at)",
+                            characNo, characName, onlineSince, now);
+                    continue;
+                }
+                jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_progress SET charac_name=?,last_seen_at=? WHERE charac_no=?", characName, now, characNo);
+                long elapsed = now.getTime() - onlineSince.getTime();
+                long sinceAward = lastAward == null ? elapsed : now.getTime() - lastAward.getTime();
+                if (elapsed < interval * 60000L || sinceAward < interval * 60000L) continue;
+                Map<String, Object> reward = new LinkedHashMap<>();
+                reward.put("targetType", "CHARACTERS");
+                reward.put("characterIds", Collections.singletonList(characNo));
+                reward.put("items", Collections.emptyList());
+                reward.put("gold", gold);
+                reward.put("ceraPoint", ceraPoint);
+                reward.put("message", "在线泡点奖励");
+                Date awardAt = new Date();
+                try {
+                    dispatchReward(reward, "在线泡点");
+                    jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_progress SET last_award_at=?,award_count=award_count+1,last_seen_at=? WHERE charac_no=?",
+                            awardAt, now, characNo);
+                    jdbcTemplate.update("INSERT INTO dnf_service.gm_online_reward_log(charac_no,charac_name,interval_minutes,cera_point,gold,awarded_at,status,message) VALUES(?,?,?,?,?,?,?,?)",
+                            characNo, characName, interval, ceraPoint, gold, awardAt, "SUCCESS", "");
+                } catch (Exception e) {
+                    jdbcTemplate.update("INSERT INTO dnf_service.gm_online_reward_log(charac_no,charac_name,interval_minutes,cera_point,gold,awarded_at,status,message) VALUES(?,?,?,?,?,?,?,?)",
+                            characNo, characName, interval, ceraPoint, gold, awardAt, "FAILED", e.getMessage() == null ? "" : e.getMessage());
+                    LOGGER.warn("Online reward for {} failed: {}", characNo, e.getMessage());
+                }
+            }
+            jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_setting SET last_run_at=?,updated_at=? WHERE id=1", now, now);
+        }
+    }
+
     private void dispatchDueTasks() {
         List<Map<String, Object>> rows = querySafe("SELECT id,interval_minutes,payload_json FROM dnf_service.gm_reward_task WHERE enabled=1 AND next_run_at IS NOT NULL AND next_run_at <= NOW() ORDER BY id");
         for (Map<String, Object> row : rows) {
@@ -243,11 +370,24 @@ public class GmFeatureService {
         String message = stringValue(payload.get("message"), "GM奖励");
         int sent = 0;
         for (Integer characNo : recipients) {
-            if (items.isEmpty() && gold == 0) {
+            if (items.isEmpty() && gold == 0 && ceraPoint == 0) {
+                continue;
+            }
+            if (items.isEmpty()) {
+                if (gold > 0) {
+                    Postal postal = new Postal();
+                    postal.setSendCharacName(sender);
+                    postal.setReceiveCharacNo(String.valueOf(characNo));
+                    postal.setItemId(0L);
+                    postal.setAddInfo(1);
+                    postal.setGold(gold);
+                    postalService.sendMail(postal);
+                    sent++;
+                }
+                if (ceraPoint > 0) addCeraPoint(characNo, ceraPoint);
                 continue;
             }
             boolean first = true;
-            if (items.isEmpty()) items = Collections.singletonList(Collections.<String, Object>emptyMap());
             for (Map<String, Object> item : items) {
                 Postal postal = new Postal();
                 postal.setSendCharacName(sender);

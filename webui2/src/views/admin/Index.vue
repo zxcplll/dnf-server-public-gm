@@ -58,6 +58,10 @@ menus.value = [
     ]
   },
   {
+    path: '/online-reward',
+    meta: { title: '在线泡点', icon: 'clock-circle' }
+  },
+  {
     path: '/mail',
     meta: { title: '邮件管理', icon: 'home' },
     children: [

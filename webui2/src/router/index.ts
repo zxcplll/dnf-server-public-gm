@@ -177,6 +177,14 @@ const routes: Array<RouteRecordRaw> = [
                 ]
             },
             {
+                path: 'online-reward',
+                name: 'OnlineReward',
+                component: () => import('../views/admin/reward/OnlineReward.vue'),
+                meta: {
+                    title: '在线泡点'
+                }
+            },
+            {
                 path: 'mail',
                 meta: {
                     title: '邮件管理'

@@ -51,6 +51,33 @@ public class GmFeatureController {
         return gmFeatureService.sendGlobalReward(payload);
     }
 
+    @GetMapping("online-reward")
+    public Map<String, Object> onlineReward() {
+        return gmFeatureService.getOnlineReward();
+    }
+
+    @PutMapping("online-reward")
+    public Map<String, Object> saveOnlineReward(@RequestBody Map<String, Object> payload) {
+        return gmFeatureService.saveOnlineReward(payload);
+    }
+
+    @PostMapping("online-reward/toggle")
+    public Map<String, Object> toggleOnlineReward(@RequestParam boolean enabled) {
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("enabled", enabled);
+        Map<String, Object> current = gmFeatureService.getOnlineReward();
+        payload.put("intervalMinutes", current.get("intervalMinutes"));
+        payload.put("ceraPoint", current.get("ceraPoint"));
+        payload.put("gold", current.get("gold"));
+        return gmFeatureService.saveOnlineReward(payload);
+    }
+
+    @GetMapping("online-reward/logs")
+    public List<Map<String, Object>> onlineRewardLogs(@RequestParam(defaultValue = "1") int page,
+                                                       @RequestParam(defaultValue = "20") int pageSize) {
+        return gmFeatureService.listOnlineRewardLogs(page, pageSize);
+    }
+
     @GetMapping("mail")
     public Map<String, Object> queryMail(@RequestParam(required = false) String sender,
                                          @RequestParam(required = false) String receiver,
