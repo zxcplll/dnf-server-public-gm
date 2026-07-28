@@ -39,10 +39,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
       </section>
 
       <a-row :gutter="14" class="stat-row">
-        <a-col :xs="12" :lg="6"><div class="stat-card"><div class="stat-icon blue"><icon-user /></div><span>账号总数</span><strong>{{ data.overview?.totalAccounts || 0 }}</strong><small>全部注册账号</small></div></a-col>
-        <a-col :xs="12" :lg="6"><div class="stat-card"><div class="stat-icon green"><icon-user-group /></div><span>当前在线</span><strong>{{ (data.overview?.online || []).length }}</strong><small>实时在线角色</small></div></a-col>
-        <a-col :xs="12" :lg="6"><div class="stat-card"><div class="stat-icon purple"><icon-calendar /></div><span>今日上线</span><strong>{{ (data.overview?.todayActive || []).length }}</strong><small>今日活跃角色</small></div></a-col>
-        <a-col :xs="12" :lg="6"><div class="stat-card"><div class="stat-icon orange"><icon-user-add /></div><span>今日注册角色</span><strong>{{ data.overview?.todayRegistrations || 0 }}</strong><small>今天新建角色</small></div></a-col>
+        <a-col :xs="24" :sm="12" :lg="6"><div class="stat-card"><div class="stat-icon blue"><icon-user /></div><span>账号总数</span><strong>{{ data.overview?.totalAccounts || 0 }}</strong><small>全部注册账号</small></div></a-col>
+        <a-col :xs="24" :sm="12" :lg="6"><div class="stat-card"><div class="stat-icon green"><icon-user-group /></div><span>当前在线</span><strong>{{ (data.overview?.online || []).length }}</strong><small>实时在线角色</small></div></a-col>
+        <a-col :xs="24" :sm="12" :lg="6"><div class="stat-card"><div class="stat-icon purple"><icon-calendar /></div><span>今日上线</span><strong>{{ (data.overview?.todayActive || []).length }}</strong><small>今日活跃角色</small></div></a-col>
+        <a-col :xs="24" :sm="12" :lg="6"><div class="stat-card"><div class="stat-icon orange"><icon-user-add /></div><span>今日注册角色</span><strong>{{ data.overview?.todayRegistrations || 0 }}</strong><small>今天新建角色</small></div></a-col>
       </a-row>
 
       <a-row :gutter="14" class="roster-row">
@@ -54,30 +54,216 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
 </template>
 
 <style scoped lang="less">
-.dashboard-view { min-height: 100%; padding: 20px; background: #f5f7fb; }
-.welcome-panel { display: flex; justify-content: space-between; align-items: center; padding: 24px 28px; border-radius: 12px; color: #fff; background: linear-gradient(115deg, #172554 0%, #1d4ed8 55%, #2563eb 100%); box-shadow: 0 10px 24px rgba(30,64,175,.18); margin-bottom: 16px; }
-.eyebrow { font-size: 11px; letter-spacing: 1.2px; opacity: .7; }
-.welcome-panel h1 { margin: 8px 0 4px; font-size: 27px; }
-.welcome-panel p { margin: 0; color: rgba(255,255,255,.72); font-size: 13px; }
-.welcome-actions { display: flex; gap: 10px; }
-.welcome-actions :deep(.arco-btn-secondary) { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.26); color: #fff; }
-.stat-row, .roster-row { margin-bottom: 14px; }
-.stat-card { position: relative; background: #fff; border: 1px solid var(--color-border-2); border-radius: 10px; min-height: 133px; padding: 16px; box-shadow: 0 3px 12px rgba(31,35,41,.04); }
-.stat-card > span { display: block; color: var(--color-text-2); font-size: 13px; }
-.stat-card strong { display: block; margin-top: 5px; color: var(--color-text-1); font-size: 28px; line-height: 1.2; }
-.stat-card small { color: var(--color-text-3); font-size: 11px; }
-.stat-icon { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 8px; margin-bottom: 11px; }
-.stat-icon.blue { color: #2563eb; background: #e8f0ff; } .stat-icon.green { color: #059669; background: #e8fbf2; } .stat-icon.purple { color: #7c3aed; background: #f1eaff; } .stat-icon.orange { color: #d97706; background: #fff3dc; }
-.roster-card { border-radius: 10px; border: 1px solid var(--color-border-2); box-shadow: 0 3px 12px rgba(31,35,41,.04); }
+.dashboard-view {
+  min-height: 100%;
+  padding: 18px;
+  background-color: var(--gm-bg);
+  background-image:
+    linear-gradient(rgba(151, 174, 204, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(151, 174, 204, .035) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.welcome-panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 148px;
+  margin-bottom: 14px;
+  padding: 24px 26px;
+  overflow: hidden;
+  border: 1px solid rgba(77, 228, 210, .28);
+  border-radius: 8px;
+  color: var(--gm-text);
+  background: #0c1726;
+  box-shadow: inset 3px 0 0 var(--gm-cyan), 0 16px 38px rgba(0, 0, 0, .18);
+
+  &::after {
+    content: "LIVE OPERATIONS";
+    position: absolute;
+    right: 24px;
+    bottom: 12px;
+    color: rgba(77, 228, 210, .13);
+    font: 800 30px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    pointer-events: none;
+  }
+
+  h1 {
+    margin: 8px 0 5px;
+    color: var(--gm-text);
+    font-size: 28px;
+    line-height: 1.15;
+    letter-spacing: 0;
+  }
+
+  p {
+    margin: 0;
+    color: var(--gm-muted);
+    font-size: 13px;
+  }
+}
+
+.eyebrow {
+  color: var(--gm-cyan);
+  font: 700 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: .12em;
+}
+
+.welcome-actions {
+  z-index: 1;
+  display: flex;
+  gap: 9px;
+}
+
+.welcome-actions :deep(.arco-btn-secondary) {
+  border-color: var(--gm-rule-strong);
+  color: var(--gm-text);
+  background: var(--gm-surface-raised);
+}
+
+.stat-row,
+.roster-row {
+  margin-bottom: 14px;
+}
+
+.stat-row :deep(.arco-col),
+.roster-row :deep(.arco-col) {
+  margin-bottom: 14px;
+}
+
+.stat-card {
+  position: relative;
+  min-height: 136px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--gm-rule);
+  border-radius: 8px;
+  background: var(--gm-surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .14);
+  transition: border-color 160ms ease, transform 160ms ease;
+
+  &:hover {
+    border-color: rgba(77, 228, 210, .44);
+    transform: translateY(-2px);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    width: 30px;
+    height: 1px;
+    background: var(--gm-rule-strong);
+  }
+
+  > span {
+    display: block;
+    color: var(--gm-muted);
+    font-size: 12px;
+  }
+
+  strong {
+    display: block;
+    margin-top: 5px;
+    color: var(--gm-text);
+    font: 700 29px/1.15 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  small {
+    color: var(--gm-subtle);
+    font-size: 11px;
+  }
+}
+
+.stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 11px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+
+.stat-icon.blue { color: var(--gm-blue); background: var(--gm-blue-soft); }
+.stat-icon.green { color: var(--gm-cyan); background: var(--gm-cyan-soft); }
+.stat-icon.purple { color: #c58cff; background: rgba(197, 140, 255, .12); }
+.stat-icon.orange { color: var(--gm-amber); background: var(--gm-amber-soft); }
+
+.roster-card {
+  height: 100%;
+  border-radius: 8px;
+  border-color: var(--gm-rule);
+  background: var(--gm-surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .14);
+}
+
 .roster-card :deep(.arco-card-body) { padding: 7px 16px 6px; }
-.roster-card :deep(.arco-card-actions) { padding: 0 10px; text-align: right; }
-.card-title { display: inline-flex; align-items: center; gap: 7px; }
-.state-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; } .state-dot.online { background: #10b981; } .state-dot.today { background: #8b5cf6; }
-.roster-list { min-height: 180px; max-height: 375px; overflow: auto; }
-.roster-item { display: flex; align-items: center; gap: 9px; min-height: 47px; border-bottom: 1px solid var(--color-border-2); }
+.roster-card :deep(.arco-card-actions) { padding: 0 10px; border-top-color: var(--gm-rule); text-align: right; }
+
+.card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--gm-text);
+}
+
+.state-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.state-dot.online { background: var(--gm-cyan); box-shadow: 0 0 10px rgba(77, 228, 210, .55); }
+.state-dot.today { background: var(--gm-amber); box-shadow: 0 0 10px rgba(255, 188, 104, .42); }
+
+.roster-list {
+  min-height: 180px;
+  max-height: 375px;
+  overflow: auto;
+}
+
+.roster-item {
+  display: flex;
+  align-items: center;
+  min-height: 49px;
+  gap: 9px;
+  border-bottom: 1px solid var(--gm-rule);
+}
+
 .roster-item:last-child { border-bottom: 0; }
-.avatar { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
-.online-avatar { color: #059669; background: #e8fbf2; } .today-avatar { color: #7c3aed; background: #f1eaff; }
-.name { color: var(--color-text-1); font-weight: 600; } .meta { margin-left: auto; color: var(--color-text-3); font-size: 12px; }
-@media (max-width: 768px) { .dashboard-view { padding: 10px; } .welcome-panel { align-items: flex-start; flex-direction: column; gap: 16px; padding: 20px; } .welcome-actions { width: 100%; } .welcome-actions .arco-btn { flex: 1; } .meta { font-size: 11px; } }
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.online-avatar { color: var(--gm-cyan); background: var(--gm-cyan-soft); }
+.today-avatar { color: var(--gm-amber); background: var(--gm-amber-soft); }
+.name { min-width: 0; overflow: hidden; color: var(--gm-text); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.meta { margin-left: auto; color: var(--gm-subtle); font-size: 12px; white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .dashboard-view { padding: 10px; background-size: 24px 24px; }
+  .welcome-panel { align-items: flex-start; flex-direction: column; gap: 16px; min-height: 0; padding: 20px; }
+  .welcome-panel::after { display: none; }
+  .welcome-actions { width: 100%; }
+  .welcome-actions .arco-btn { flex: 1 1 0; min-width: 0; }
+  .meta { max-width: 45%; overflow: hidden; font-size: 11px; text-overflow: ellipsis; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card { transition: none; }
+}
 </style>
