@@ -18,9 +18,10 @@
   --gm-z-header: 100;
   --gm-z-tabs: 90;
   --gm-z-drawer: 1100;
-  --gm-z-dialog: 1200;
-  --gm-z-hover: 1300;
-  --gm-z-notice: 1400;
+  --gm-z-popup: 1700;
+  --gm-z-hover: 1800;
+  --gm-z-dialog: 2000;
+  --gm-z-notice: 2200;
   color: var(--gm-text);
   background: var(--gm-bg);
 }

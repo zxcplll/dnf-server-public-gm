@@ -83,24 +83,36 @@ const triggerEl = ref<unknown | null>(null);
 const panelMaxHeight = ref<number>(520);
 const leftScrollHeight = ref<number>(420);
 const rightScrollHeight = ref<number>(420);
+const popupPlacement = ref<"bl" | "tl">("bl");
 const MAX_PANEL_HEIGHT = 520; // hard cap (as requested)
-const MIN_PANEL_HEIGHT = 260;
+const MIN_PANEL_HEIGHT = 220;
 
 const PANEL_WIDTH = 614;
 const VIEWPORT_SIDE_GAP = 24; // leave space to viewport edges
 const POPUP_CHROME_Y = 16; // reserve for popup padding/shadow/border to avoid 1-2px overflow
 
-const viewportWidth = ref<number>(window.innerWidth || document.documentElement.clientWidth);
+const getViewportWidth = () => window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth;
+const getViewportHeight = () => window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
+const getViewportOffset = () => ({
+	left: window.visualViewport?.offsetLeft || 0,
+	top: window.visualViewport?.offsetTop || 0
+});
+
+const viewportWidth = ref<number>(getViewportWidth());
 const updateViewportWidth = () => {
-	viewportWidth.value = window.innerWidth || document.documentElement.clientWidth;
+	viewportWidth.value = getViewportWidth();
 };
 
 // Apply height/width to the popup container itself (not only the inner panel)
 const popupStyle = computed(() => {
-	const w = Math.max(320, Math.min(PANEL_WIDTH, viewportWidth.value - VIEWPORT_SIDE_GAP));
+	const available = Math.max(0, viewportWidth.value - VIEWPORT_SIDE_GAP);
+	const w = viewportWidth.value < 284
+		? available
+		: Math.min(PANEL_WIDTH, Math.max(260, available));
 	return {
 		maxHeight: `${panelMaxHeight.value}px`,
 		width: `${w}px`,
+		maxWidth: `calc(100vw - ${VIEWPORT_SIDE_GAP}px)`,
 		overflow: "hidden"
 	};
 });
@@ -161,25 +173,30 @@ const updatePopupHeights = (anchorRect?: DOMRect) => {
 	if (!rect) return;
 	if (typeof window === "undefined") return;
 
-	const viewportH = window.innerHeight || document.documentElement.clientHeight;
+	const viewportH = getViewportHeight();
+	const viewportTop = getViewportOffset().top;
+	const viewportBottom = viewportTop + viewportH;
 
-	const marginBottom = 12;
+	const viewportGap = 12;
 	const translateY = 6;
-	const spaceBelow = viewportH - rect.bottom - marginBottom - translateY - POPUP_CHROME_Y;
-	const available = Math.max(0, spaceBelow);
+	const spaceBelow = viewportBottom - rect.bottom - viewportGap - translateY - POPUP_CHROME_Y;
+	const spaceAbove = rect.top - viewportTop - viewportGap - translateY - POPUP_CHROME_Y;
+	const placeAbove = spaceBelow < MIN_PANEL_HEIGHT && spaceAbove > spaceBelow;
+	const available = Math.max(0, placeAbove ? spaceAbove : spaceBelow);
+	popupPlacement.value = placeAbove ? "tl" : "bl";
 
-	const maxH = Math.max(MIN_PANEL_HEIGHT, Math.min(MAX_PANEL_HEIGHT, Math.floor(available)));
+	const maxH = Math.max(0, Math.min(MAX_PANEL_HEIGHT, Math.floor(available)));
 	panelMaxHeight.value = maxH;
 
 	// LEFT: panel has padding 12(top/bottom)
 	const leftPadding = 12 + 12;
-	leftScrollHeight.value = Math.max(120, maxH - leftPadding - leftTitleHeight.value - leftTitleMarginBottom.value);
+	leftScrollHeight.value = Math.max(0, maxH - leftPadding - leftTitleHeight.value - leftTitleMarginBottom.value);
 
 	// RIGHT: panel has padding 16(top/bottom)
 	const rightPadding = 16 + 16;
 	const headerBlock = rightHeaderHeight.value + rightHeaderMarginBottom.value;
 	const paginationBlock = rightPaginationHeight.value + rightPaginationMarginTop.value;
-	rightScrollHeight.value = Math.max(120, maxH - rightPadding - headerBlock - paginationBlock);
+	rightScrollHeight.value = Math.max(0, maxH - rightPadding - headerBlock - paginationBlock);
 };
 
 const onTriggerMouseDown = (e: MouseEvent) => {
@@ -197,10 +214,14 @@ watch(popupVisible, async (visible) => {
 		setupSizeObserver();
 		window.addEventListener("resize", onWindowViewportChange);
 		window.addEventListener("scroll", onWindowViewportChange, true);
+		window.visualViewport?.addEventListener("resize", onWindowViewportChange);
+		window.visualViewport?.addEventListener("scroll", onWindowViewportChange);
 	} else {
 		cleanupSizeObserver();
 		window.removeEventListener("resize", onWindowViewportChange);
 		window.removeEventListener("scroll", onWindowViewportChange, true);
+		window.visualViewport?.removeEventListener("resize", onWindowViewportChange);
+		window.visualViewport?.removeEventListener("scroll", onWindowViewportChange);
 	}
 });
 
@@ -221,10 +242,14 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	cleanupSizeObserver();
+	hoverSizeObserver?.disconnect();
+	hoverSizeObserver = null;
 	if (rafId != null) cancelAnimationFrame(rafId);
 	if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
 	window.removeEventListener("resize", onWindowViewportChange);
 	window.removeEventListener("scroll", onWindowViewportChange, true);
+	window.visualViewport?.removeEventListener("resize", onWindowViewportChange);
+	window.visualViewport?.removeEventListener("scroll", onWindowViewportChange);
 });
 
 const loading = ref(false);
@@ -237,12 +262,16 @@ const hoverPos = ref({x: 0, y: 0});
 const hoverPanelEl = ref<HTMLElement | null>(null);
 const pointerPos = ref({x: 0, y: 0});
 let hoverRafId: number | null = null;
+let hoverSizeObserver: ResizeObserver | null = null;
 
 const positionHoverPanel = () => {
 	if (!hoverItem.value) return;
 
-	const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-	const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+	const viewportWidth = getViewportWidth();
+	const viewportHeight = getViewportHeight();
+	const viewportOffset = getViewportOffset();
+	const viewportRight = viewportOffset.left + viewportWidth;
+	const viewportBottom = viewportOffset.top + viewportHeight;
 	const margin = 12;
 	const gap = 16;
 	const panelRect = hoverPanelEl.value?.getBoundingClientRect();
@@ -251,17 +280,19 @@ const positionHoverPanel = () => {
 
 	const rightX = pointerPos.value.x + gap;
 	const leftX = pointerPos.value.x - gap - panelWidth;
-	const preferredX = rightX + panelWidth <= viewportWidth - margin ? rightX : leftX;
-	const maxX = Math.max(margin, viewportWidth - panelWidth - margin);
+	const preferredX = rightX + panelWidth <= viewportRight - margin ? rightX : leftX;
+	const minX = viewportOffset.left + margin;
+	const maxX = Math.max(minX, viewportRight - panelWidth - margin);
 
 	const belowY = pointerPos.value.y + gap;
 	const aboveY = pointerPos.value.y - gap - panelHeight;
-	const preferredY = belowY + panelHeight <= viewportHeight - margin ? belowY : aboveY;
-	const maxY = Math.max(margin, viewportHeight - panelHeight - margin);
+	const preferredY = belowY + panelHeight <= viewportBottom - margin ? belowY : aboveY;
+	const minY = viewportOffset.top + margin;
+	const maxY = Math.max(minY, viewportBottom - panelHeight - margin);
 
 	hoverPos.value = {
-		x: Math.max(margin, Math.min(preferredX, maxX)),
-		y: Math.max(margin, Math.min(preferredY, maxY))
+		x: Math.max(minX, Math.min(preferredX, maxX)),
+		y: Math.max(minY, Math.min(preferredY, maxY))
 	};
 };
 
@@ -376,8 +407,14 @@ const updateHoverPos = (event: MouseEvent) => {
 };
 
 watch(hoverItem, async (item) => {
+	hoverSizeObserver?.disconnect();
+	hoverSizeObserver = null;
 	if (!item) return;
 	await nextTick();
+	if (hoverPanelEl.value && typeof ResizeObserver !== "undefined") {
+		hoverSizeObserver = new ResizeObserver(() => scheduleHoverPosition());
+		hoverSizeObserver.observe(hoverPanelEl.value);
+	}
 	scheduleHoverPosition();
 });
 
@@ -558,11 +595,11 @@ onMounted(() => {
 		<a-trigger
 			v-model:popup-visible="popupVisible"
 			trigger="click"
-			position="bl"
+			:position="popupPlacement"
 			:popup-translate="[0, 6]"
 			:unmount-on-close="false"
 			:auto-fit-popup-width="false"
-			:auto-fit-popup-height="true"
+			:auto-fit-position="true"
 			:popup-style="popupStyle"
 			:popup-align="{ left: 'left', top: 'bottom' }"
 		>
@@ -652,6 +689,7 @@ onMounted(() => {
 							/>
 						</div>
 					</div>
+					<Teleport to="body">
 					<div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
 						<div class="hover-panel-icon-col">
 							<ItemImg :icon="hoverItem.icon" :rarity="hoverItem.rarity ?? 0" style="width: 48px; height: 48px;" />
@@ -694,6 +732,7 @@ onMounted(() => {
 							<div v-if="hoverItem.description" class="hover-desc">{{ hoverItem.description.split('%%').join('%').split('\\n').join('\n') }}</div>
 						</div>
 					</div>
+					</Teleport>
 				</div>
 			</template>
 		</a-trigger>
@@ -711,22 +750,23 @@ onMounted(() => {
 	height: 100%;
 	box-sizing: border-box;
 	display: flex;
-	background: rgb(32, 32, 43);
+	background: #0b1422;
 	color: #e5e7eb;
-	border-radius: 10px;
-	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+	border: 1px solid rgba(151, 174, 204, .24);
+	border-radius: 8px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
 	overflow: hidden;
 	position: relative;
 	/* Follow popup width on small screens so content isn't clipped */
 	max-width: 100%;
 }
 
-/* If the viewport is narrower than 920px, allow horizontal scroll inside popup */
 :deep(.arco-trigger-popup) {
 	box-sizing: border-box;
 	padding: 0;
 	max-height: inherit;
-	overflow-x: auto;
+	max-width: calc(100vw - 24px);
+	overflow-x: hidden;
 	overflow-y: hidden;
 }
 
@@ -759,12 +799,13 @@ onMounted(() => {
 
 @media (max-width: 640px) {
 	.panel-left {
-		width: 140px;
+		width: 132px;
+		padding: 10px 8px;
 	}
 
 	.panel-right {
-		max-width: calc(100% - 140px);
-		padding: 12px;
+		max-width: calc(100% - 132px);
+		padding: 10px;
 	}
 
 	.item-card {
@@ -850,8 +891,8 @@ onMounted(() => {
 	display: flex;
 	align-items: center;
 	padding: 12px;
-	border-radius: 10px;
-	background: #262626;
+	border-radius: 6px;
+	background: #101a2a;
 	margin-bottom: 10px;
 	cursor: pointer;
 	border: 1px solid transparent;
@@ -972,14 +1013,14 @@ onMounted(() => {
 
 .hover-panel {
 	position: fixed;
-	z-index: 9999;
-	background: rgba(17, 24, 39, 0.96);
+	z-index: var(--gm-z-hover, 1800);
+	background: rgba(11, 20, 34, 0.98);
 	color: #e5e7eb;
 	padding: 12px;
 	border-radius: 8px;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 	width: min(400px, calc(100vw - 24px));
-	max-height: calc(100vh - 24px);
+	max-height: calc(100dvh - 24px);
 	box-sizing: border-box;
 	overflow-y: auto;
 	overflow-x: hidden;

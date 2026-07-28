@@ -2,10 +2,99 @@
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
   color: #dce8f6;
   background: #080d16;
+  --gm-bg: #080d16;
+  --gm-surface: #101a2a;
+  --gm-surface-raised: #152238;
+  --gm-surface-hover: #1b2b43;
+  --gm-rule: rgba(151, 174, 204, 0.18);
+  --gm-rule-strong: rgba(151, 174, 204, 0.32);
+  --gm-text: #edf5ff;
+  --gm-muted: #8fa4bf;
+  --gm-subtle: #6f849f;
+  --gm-cyan: #4de4d2;
+  --gm-cyan-soft: rgba(77, 228, 210, 0.13);
+  --gm-amber: #ffbc68;
+  --gm-z-drawer: 1100;
+  --gm-z-popup: 1700;
+  --gm-z-hover: 1800;
+  --gm-z-dialog: 2000;
+  --gm-z-notice: 2200;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.arco-trigger-popup,
+.arco-dropdown,
+.arco-select-dropdown,
+.arco-picker-popup,
+.arco-popover-popup {
+  z-index: var(--gm-z-popup) !important;
+}
+
+.arco-modal-wrapper,
+.arco-modal-container,
+.arco-drawer-container {
+  z-index: var(--gm-z-dialog) !important;
+}
+
+.arco-notification-list,
+.arco-message-list {
+  z-index: var(--gm-z-notice) !important;
+}
+
+.arco-modal,
+.arco-drawer,
+.arco-trigger-popup,
+.arco-dropdown,
+.arco-select-dropdown,
+.arco-picker-popup,
+.arco-popover-popup {
+  color: var(--gm-text);
+}
+
+.arco-modal,
+.arco-drawer,
+.arco-dropdown,
+.arco-select-dropdown,
+.arco-picker-popup,
+.arco-popover-popup {
+  border-color: var(--gm-rule-strong);
+  background: var(--gm-surface);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.36);
+}
+
+.arco-modal {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+
+.arco-modal-header,
+.arco-modal-footer,
+.arco-drawer-header,
+.arco-drawer-footer {
+  border-color: var(--gm-rule);
+}
+
+.arco-modal-title,
+.arco-drawer-title,
+.arco-select-option,
+.arco-dropdown-option {
+  color: var(--gm-text);
+}
+
+.arco-select-option-hover,
+.arco-dropdown-option:hover {
+  background: var(--gm-surface-hover);
+}
+
+.arco-modal-body,
+.arco-drawer-body {
+  min-width: 0;
+  max-height: calc(100dvh - 210px);
+  overflow: auto;
 }
 
 html,
