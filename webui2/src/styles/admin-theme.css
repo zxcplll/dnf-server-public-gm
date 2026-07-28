@@ -1,0 +1,249 @@
+.admin-page {
+  --gm-bg: #080d16;
+  --gm-surface: #101a2a;
+  --gm-surface-raised: #152238;
+  --gm-surface-hover: #1b2b43;
+  --gm-rule: rgba(151, 174, 204, 0.18);
+  --gm-rule-strong: rgba(151, 174, 204, 0.32);
+  --gm-text: #edf5ff;
+  --gm-muted: #8fa4bf;
+  --gm-subtle: #6f849f;
+  --gm-cyan: #4de4d2;
+  --gm-cyan-soft: rgba(77, 228, 210, 0.13);
+  --gm-amber: #ffbc68;
+  --gm-amber-soft: rgba(255, 188, 104, 0.13);
+  --gm-blue: #6d9dff;
+  --gm-blue-soft: rgba(109, 157, 255, 0.14);
+  --gm-danger: #ff7d8d;
+  --gm-z-header: 100;
+  --gm-z-tabs: 90;
+  --gm-z-drawer: 1100;
+  --gm-z-dialog: 1200;
+  --gm-z-hover: 1300;
+  --gm-z-notice: 1400;
+  color: var(--gm-text);
+  background: var(--gm-bg);
+}
+
+.admin-page .arco-layout,
+.admin-page .arco-layout-sider,
+.admin-page .arco-layout-content {
+  background: transparent;
+}
+
+.admin-page .arco-card,
+.admin-page .arco-table-container,
+.admin-page .arco-form,
+.admin-page .arco-descriptions {
+  border-color: var(--gm-rule);
+  background: var(--gm-surface);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+}
+
+.admin-page .arco-card {
+  border-radius: 8px;
+}
+
+.admin-page .arco-card-header {
+  border-bottom-color: var(--gm-rule);
+  background: transparent;
+}
+
+.admin-page .arco-card-header-title,
+.admin-page .arco-card-body,
+.admin-page .arco-table,
+.admin-page .arco-table-th,
+.admin-page .arco-table-td,
+.admin-page .arco-descriptions-title,
+.admin-page .arco-descriptions-item-label,
+.admin-page .arco-descriptions-item-value {
+  color: var(--gm-text);
+}
+
+.admin-page .arco-table-th {
+  background: var(--gm-surface-raised);
+  border-bottom-color: var(--gm-rule-strong);
+}
+
+.admin-page .arco-table-td {
+  background: var(--gm-surface);
+  border-bottom-color: var(--gm-rule);
+}
+
+.admin-page .arco-table-tr:hover .arco-table-td {
+  background: var(--gm-surface-hover);
+}
+
+.admin-page .arco-input-wrapper,
+.admin-page .arco-select-view,
+.admin-page .arco-input-number,
+.admin-page .arco-textarea-wrapper {
+  border-color: var(--gm-rule-strong);
+  background: var(--gm-surface-raised);
+  color: var(--gm-text);
+}
+
+.admin-page .arco-input-wrapper:hover,
+.admin-page .arco-select-view:hover,
+.admin-page .arco-input-number:hover,
+.admin-page .arco-textarea-wrapper:hover {
+  border-color: rgba(77, 228, 210, 0.65);
+}
+
+.admin-page .arco-input-wrapper.arco-input-focus,
+.admin-page .arco-select-view.arco-select-view-focus,
+.admin-page .arco-input-number.arco-input-number-focus,
+.admin-page .arco-textarea-wrapper.arco-textarea-focus {
+  border-color: var(--gm-cyan);
+  box-shadow: 0 0 0 2px var(--gm-cyan-soft);
+}
+
+.admin-page .arco-input,
+.admin-page .arco-textarea,
+.admin-page .arco-input-number-input,
+.admin-page .arco-select-view-value,
+.admin-page .arco-select-view-suffix {
+  color: var(--gm-text);
+}
+
+.admin-page .arco-input::placeholder,
+.admin-page .arco-textarea::placeholder,
+.admin-page .arco-input-number-input::placeholder {
+  color: var(--gm-subtle);
+}
+
+.admin-page .arco-btn {
+  border-radius: 6px;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.admin-page .arco-btn-primary {
+  color: #061118;
+  background: var(--gm-cyan);
+  border-color: var(--gm-cyan);
+}
+
+.admin-page .arco-btn-primary:hover {
+  color: #061118;
+  background: #70f2e2;
+  border-color: #70f2e2;
+  transform: translateY(-1px);
+}
+
+.admin-page .arco-btn-secondary,
+.admin-page .arco-btn-outline {
+  color: var(--gm-text);
+  background: var(--gm-surface-raised);
+  border-color: var(--gm-rule-strong);
+}
+
+.admin-page .arco-btn-secondary:hover,
+.admin-page .arco-btn-outline:hover {
+  color: var(--gm-cyan);
+  border-color: rgba(77, 228, 210, 0.65);
+  background: var(--gm-cyan-soft);
+}
+
+.admin-page .arco-btn-text {
+  color: var(--gm-blue);
+}
+
+.admin-page .arco-alert {
+  border-color: rgba(255, 188, 104, 0.3);
+  background: var(--gm-amber-soft);
+}
+
+.admin-page .arco-pagination-item,
+.admin-page .arco-pagination-prev,
+.admin-page .arco-pagination-next,
+.admin-page .arco-pagination-jumper-button {
+  border-color: var(--gm-rule-strong);
+  background: var(--gm-surface-raised);
+  color: var(--gm-text);
+}
+
+.admin-page .arco-pagination-item-active {
+  border-color: var(--gm-cyan);
+  background: var(--gm-cyan-soft);
+  color: var(--gm-cyan);
+}
+
+.admin-page .arco-dropdown,
+.admin-page .arco-select-dropdown,
+.admin-page .arco-trigger-popup,
+.admin-page .arco-picker-popup,
+.admin-page .arco-popover-popup {
+  z-index: var(--gm-z-dialog);
+  border-color: var(--gm-rule-strong);
+  background: var(--gm-surface);
+  color: var(--gm-text);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+}
+
+.admin-page .arco-modal-wrapper,
+.admin-page .arco-drawer {
+  z-index: var(--gm-z-dialog);
+}
+
+.admin-page .arco-modal-content,
+.admin-page .arco-drawer-content {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 120px);
+  overflow: hidden;
+  border: 1px solid var(--gm-rule-strong);
+  background: var(--gm-surface);
+  color: var(--gm-text);
+}
+
+.admin-page .arco-modal-body,
+.admin-page .arco-drawer-body {
+  min-width: 0;
+  max-height: calc(100dvh - 220px);
+  overflow: auto;
+}
+
+.admin-page .arco-modal-header,
+.admin-page .arco-drawer-header {
+  border-bottom-color: var(--gm-rule);
+}
+
+.admin-page .arco-modal-title,
+.admin-page .arco-drawer-title {
+  color: var(--gm-text);
+}
+
+.admin-page .arco-scrollbar-track-direction-vertical .arco-scrollbar-thumb-bar {
+  background: rgba(151, 174, 204, 0.32);
+}
+
+.admin-page .arco-scrollbar-track-direction-vertical .arco-scrollbar-thumb-bar:hover {
+  background: rgba(77, 228, 210, 0.58);
+}
+
+.admin-page .arco-empty-description,
+.admin-page .arco-form-item-label,
+.admin-page .arco-breadcrumb-item,
+.admin-page .arco-table-th {
+  color: var(--gm-muted);
+}
+
+.admin-page .arco-notification-list,
+.admin-page .arco-message-list {
+  z-index: var(--gm-z-notice);
+}
+
+@media (max-width: 860px) {
+  .admin-page .arco-modal-content {
+    width: min(560px, calc(100vw - 24px));
+  }
+
+  .admin-page .arco-modal-body {
+    max-height: calc(100dvh - 190px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page .arco-btn {
+    transition: none;
+  }
+}
