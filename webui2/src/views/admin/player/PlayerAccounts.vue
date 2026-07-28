@@ -52,7 +52,7 @@ const search = (resetPage = false) => {
       searchForm.value.pageNum = (pageResult.value as any).page;
     }
   }).catch((e: any) => {
-    Message.error(e?.message || "查询失败");
+    Request.showError(e, "查询失败");
   }).finally(() => {
     loading.value = false;
   });
@@ -108,7 +108,7 @@ const submitRecharge = async () => {
     rechargeOption.value.open = false;
     search(false);
   } catch (e: any) {
-    Message.error(e?.message || "充值失败");
+    Request.showError(e, "充值失败");
   }
 };
 
@@ -124,7 +124,7 @@ onMounted(() => {
 <template>
   <div class="account-manager">
     <a-card>
-      <a-form layout="inline" :model="searchForm">
+      <a-form class="gm-filter-form" layout="inline" :model="searchForm">
         <a-form-item label="账号">
           <a-input placeholder="搜索玩家账号" allow-clear v-model="searchForm.account"/>
         </a-form-item>
@@ -138,7 +138,7 @@ onMounted(() => {
         <a-form-item label="最后登录时间" >
           <a-range-picker v-model="searchForm.lastLoginTime" />
         </a-form-item>
-        <a-form-item>
+        <a-form-item class="gm-filter-actions">
           <a-button type="primary" @click="search(true)">搜索</a-button>
         </a-form-item>
       </a-form>
@@ -147,7 +147,7 @@ onMounted(() => {
     <!-- 账号列表 -->
     <a-table
         scrollbar
-        :scroll="{ y: windowHeight }"
+        :scroll="{ x: 790, y: windowHeight }"
         style="margin-top: 10px;"
         :data="pageResult.list"
         :loading="loading"
@@ -159,34 +159,34 @@ onMounted(() => {
         </div>
       </template>
       <template #columns>
-        <a-table-column title="账号" data-index="accountname" />
-        <a-table-column title="在线状态" data-index="loginStatus">
+        <a-table-column title="账号" data-index="accountname" :width="170" />
+        <a-table-column title="在线状态" data-index="loginStatus" :width="110">
           <template #cell="{ record }">
             <a-tag :color="record.loginStatus ? 'green' : 'gray'">
               {{ record.loginStatus ? '在线' : '离线' }}
             </a-tag>
           </template>
         </a-table-column>
-        <a-table-column title="用户身份" data-index="parentUid">
+        <a-table-column title="用户身份" data-index="parentUid" :width="130">
           <template #cell="{ record }">
             <a-tag :color="record.parentUid === 0 ? 'green' : 'blue'">
               {{ record.parentUid === 0 ? 'GM管理员' : '玩家' }}
             </a-tag>
           </template>
         </a-table-column>
-        <a-table-column title="频道号" data-index="channelNo">
+        <a-table-column title="频道号" data-index="channelNo" :width="90">
           <template #cell="{ record }">
           <span>
             {{ record.loginStatus ? record.channelNo : '--' }}
           </span>
           </template>
         </a-table-column>
-        <a-table-column title="最后登录时间" data-index="lastLoginDate">
+        <a-table-column title="最后登录时间" data-index="lastLoginDate" :width="190">
           <template #cell="{ record }">
             {{ record.lastLoginDate ? record.lastLoginDate: '从未登录' }}
           </template>
         </a-table-column>
-        <a-table-column title="操作">
+        <a-table-column title="操作" :width="100">
           <template #cell="{ record }">
             <a-space>
               <a-button size="small" type="primary" @click="openRecharge(record.uid, record.accountname)">充值</a-button>
@@ -199,7 +199,7 @@ onMounted(() => {
       </template>
     </a-table>
 
-    <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
+    <div class="gm-pagination-row">
       <a-pagination
           :current="searchForm.pageNum"
           :page-size="searchForm.pageSize"
@@ -235,6 +235,12 @@ onMounted(() => {
 
 <style scoped lang="less">
 .account-manager{
-  padding: 10px;
+  padding: 16px;
+}
+
+@media (max-width: 900px) {
+  .account-manager {
+    padding: 8px;
+  }
 }
 </style>

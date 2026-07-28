@@ -195,8 +195,8 @@ const pickCodeTags = computed<string[]>({
 
 <template>
   <a-spin :loading="loading" style="width: 100%">
-    <a-space direction="vertical" size="large" fill>
-      <a-card title="客户端配置" style="margin: 24px;">
+    <a-space class="assist-page" direction="vertical" size="large" fill>
+      <a-card title="客户端配置" class="assist-card">
         <template #extra>
           这些配置项会影响客户端程序的运行行为，请谨慎修改
         </template>
@@ -304,7 +304,7 @@ const pickCodeTags = computed<string[]>({
         </a-form>
       </a-card>
 
-      <a-card title="自动拾取" style="margin: 0 24px;">
+      <a-card title="自动拾取" class="assist-card">
         <template #extra>
           配置自动拾取物品的模式和自定义拾取代码组, 代码表示可自动拾取的物品ID
         </template>
@@ -321,7 +321,7 @@ const pickCodeTags = computed<string[]>({
           </a-col>
         </a-row>
       </a-card>
-      <a-card title="命名配置" style="margin: 0 24px;">
+      <a-card title="命名配置" class="assist-card">
         <template #extra>
           配置难度和品级的命名，方便在客户端显示自定义名称
         </template>
@@ -336,7 +336,7 @@ const pickCodeTags = computed<string[]>({
           </a-space>
         </a-form-item>
       </a-card>
-      <a-card title="自动翻牌" style="margin: 0 24px;">
+      <a-card title="自动翻牌" class="assist-card">
         <template #extra>
           配置通关后自动翻牌的选项, 0表示关闭翻牌功能, 1~4表示翻对应的牌
         </template>
@@ -353,7 +353,7 @@ const pickCodeTags = computed<string[]>({
           </a-col>
         </a-row>
       </a-card>
-      <a-card title="史诗闪光" style="margin: 0 24px;">
+      <a-card title="史诗闪光" class="assist-card">
         <a-row :gutter="16">
           <a-col :span="4">
             <a-form-item label="闪光开关">
@@ -368,7 +368,7 @@ const pickCodeTags = computed<string[]>({
         </a-row>
       </a-card>
       <a-col :span="24">
-        <a-card title="补丁信息" style="margin: 0 24px;">
+        <a-card title="补丁信息" class="assist-card">
           <a-form-item label="补丁名称">
             <a-input v-model="form['补丁信息']['补丁名称']" />
           </a-form-item>
@@ -387,3 +387,42 @@ const pickCodeTags = computed<string[]>({
     </a-space>
   </a-spin>
 </template>
+
+<style scoped lang="less">
+.assist-page {
+  width: 100%;
+  padding: 16px;
+}
+
+@media (max-width: 640px) {
+  .assist-page {
+    padding: 8px;
+  }
+
+  .assist-page :deep(.arco-col) {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+  }
+
+  .assist-page :deep(.arco-card-header) {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .assist-page :deep(.arco-card-header-extra) {
+    width: 100%;
+    margin-left: 0;
+    color: var(--gm-muted);
+    white-space: normal;
+  }
+
+  .assist-page :deep(.arco-space-horizontal.arco-space-wrap) {
+    width: 100%;
+  }
+
+  .assist-page :deep(.arco-space-horizontal.arco-space-wrap .arco-input-wrapper) {
+    width: 100% !important;
+  }
+}
+</style>

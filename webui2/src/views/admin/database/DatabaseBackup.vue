@@ -37,7 +37,7 @@ const load = async () => {
       schedules[type].nextRunAt = row.next_run_at ?? row.nextRunAt;
     }
   } catch (error: any) {
-    Message.error(error?.message || '备份列表加载失败');
+    Request.showError(error, '备份列表加载失败');
   } finally {
     loading.value = false;
   }
@@ -55,7 +55,7 @@ const saveSchedule = async (schedule: Schedule) => {
     Message.success(`${schedule.type === 'PVF' ? 'PVF' : '数据库'}定时备份设置已保存`);
     await load();
   } catch (error: any) {
-    Message.error(error?.message || '保存定时备份设置失败');
+    Request.showError(error, '保存定时备份设置失败');
   } finally {
     busyType.value = '';
   }
@@ -68,7 +68,7 @@ const manualBackup = async (type: string) => {
     Message.success(`${type === 'PVF' ? 'PVF' : '数据库'}备份已完成`);
     await load();
   } catch (error: any) {
-    Message.error(error?.message || '手工备份失败');
+    Request.showError(error, '手工备份失败');
   } finally {
     busyType.value = '';
   }
@@ -85,7 +85,7 @@ const restore = (entry: any) => {
         Message.success('备份恢复完成');
         await load();
       } catch (error: any) {
-        Message.error(error?.message || '恢复备份失败');
+        Request.showError(error, '恢复备份失败');
       } finally {
         busyType.value = '';
       }
@@ -99,7 +99,7 @@ onMounted(load);
 <template>
   <div class="backup-page">
     <a-card title="定时备份设置">
-      <a-grid :cols="2" :col-gap="16" :row-gap="16" responsive="screen">
+      <a-grid :cols="{ xs: 1, md: 2 }" :col-gap="16" :row-gap="16" responsive="screen">
         <a-grid-item v-for="schedule in scheduleList" :key="schedule.type">
           <div class="schedule-card">
             <div class="schedule-heading">
@@ -108,8 +108,8 @@ onMounted(load);
             </div>
             <a-form layout="vertical" :model="schedule">
               <a-row :gutter="12">
-                <a-col :span="12"><a-form-item label="间隔（分钟）"><a-input-number v-model="schedule.intervalMinutes" :min="1" :max="525600" style="width: 100%" /></a-form-item></a-col>
-                <a-col :span="12"><a-form-item label="保存条目上限"><a-input-number v-model="schedule.retainCount" :min="1" :max="1000" style="width: 100%" /></a-form-item></a-col>
+                <a-col :xs="24" :sm="12"><a-form-item label="间隔（分钟）"><a-input-number v-model="schedule.intervalMinutes" :min="1" :max="525600" style="width: 100%" /></a-form-item></a-col>
+                <a-col :xs="24" :sm="12"><a-form-item label="保存条目上限"><a-input-number v-model="schedule.retainCount" :min="1" :max="1000" style="width: 100%" /></a-form-item></a-col>
               </a-row>
               <div class="schedule-summary">最多保存约 {{ scheduleDays(schedule) }} 天的数据{{ schedule.nextRunAt ? ` · 下次执行 ${schedule.nextRunAt}` : '' }}</div>
               <div class="schedule-actions"><a-button :loading="busyType === `manual-${schedule.type}`" @click="manualBackup(schedule.type)">手工备份</a-button><a-button type="primary" :loading="busyType === schedule.type" @click="saveSchedule(schedule)">保存设置</a-button></div>
@@ -120,14 +120,14 @@ onMounted(load);
     </a-card>
 
     <a-card title="备份条目" class="entries-card">
-      <a-table :data="entries" :loading="loading" :pagination="false" row-key="id">
+      <a-table :data="entries" :loading="loading" :pagination="false" :scroll="{ x: 1010 }" row-key="id">
         <template #columns>
           <a-table-column title="ID" data-index="id" :width="80" />
           <a-table-column title="类型" :width="110"><template #cell="{ record }"><a-tag :color="record.type === 'PVF' ? 'arcoblue' : 'green'">{{ record.type === 'PVF' ? 'PVF' : '数据库' }}</a-tag></template></a-table-column>
           <a-table-column title="大小" :width="120"><template #cell="{ record }">{{ formatBytes(record.size_bytes ?? record.sizeBytes) }}</template></a-table-column>
           <a-table-column title="创建时间" data-index="created_at" :width="180" />
           <a-table-column title="状态" :width="100"><template #cell="{ record }"><a-tag :color="record.status === 'SUCCESS' ? 'green' : 'red'">{{ record.status }}</a-tag></template></a-table-column>
-          <a-table-column title="文件路径" data-index="path" ellipsis tooltip />
+          <a-table-column title="文件路径" data-index="path" :width="320" ellipsis tooltip />
           <a-table-column title="操作" :width="100"><template #cell="{ record }"><a-button size="small" type="primary" :disabled="record.status !== 'SUCCESS'" :loading="busyType === `restore-${record.id}`" @click="restore(record)">恢复</a-button></template></a-table-column>
         </template>
       </a-table>

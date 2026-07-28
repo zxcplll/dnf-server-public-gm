@@ -50,7 +50,7 @@ const loadCharacters = async () => {
     const response = await Request.get<any>('/api/v1/charac?page=1&pageSize=100');
     characters.value = response.data?.list || [];
   } catch (error: any) {
-    Message.error(error?.message || '角色列表加载失败');
+    Request.showError(error, '角色列表加载失败');
   } finally {
     characterLoading.value = false;
   }
@@ -106,7 +106,7 @@ const submit = async () => {
         Message.success(`发放完成：${response.data?.recipientCount ?? 0} 个角色，${response.data?.mailCount ?? 0} 封邮件`);
         reset();
       } catch (error: any) {
-        Message.error(error?.message || '全服发放失败');
+        Request.showError(error, '全服发放失败');
       } finally {
         submitting.value = false;
       }
@@ -123,11 +123,11 @@ onMounted(loadCharacters);
       <template #extra><a-tag color="orange">操作会立即发送邮件</a-tag></template>
       <a-form :model="form" layout="vertical">
         <a-row :gutter="16">
-          <a-col :span="8"><a-form-item label="发放范围"><a-select v-model="form.targetType" style="width: 100%"><a-option value="ONLINE">全服在线玩家</a-option><a-option value="ALL">所有玩家</a-option><a-option value="CHARACTERS">指定角色</a-option></a-select></a-form-item></a-col>
-          <a-col v-if="form.targetType === 'CHARACTERS'" :span="16"><a-form-item label="发放角色"><a-select v-model="form.characterIds" multiple allow-search :loading="characterLoading" :options="characterOptions()" placeholder="选择一个或多个角色" style="width: 100%" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="金币"><a-input-number v-model="form.gold" :min="0" :max="2147483647" style="width: 100%" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="点券"><a-input-number v-model="form.ceraPoint" :min="0" :max="2147483647" style="width: 100%" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="邮件说明"><a-input v-model="form.message" /></a-form-item></a-col>
+          <a-col :xs="24" :md="8"><a-form-item label="发放范围"><a-select v-model="form.targetType" style="width: 100%"><a-option value="ONLINE">全服在线玩家</a-option><a-option value="ALL">所有玩家</a-option><a-option value="CHARACTERS">指定角色</a-option></a-select></a-form-item></a-col>
+          <a-col v-if="form.targetType === 'CHARACTERS'" :xs="24" :md="16"><a-form-item label="发放角色"><a-select v-model="form.characterIds" multiple allow-search :loading="characterLoading" :options="characterOptions()" placeholder="选择一个或多个角色" style="width: 100%" /></a-form-item></a-col>
+          <a-col :xs="24" :md="8"><a-form-item label="金币"><a-input-number v-model="form.gold" :min="0" :max="2147483647" style="width: 100%" /></a-form-item></a-col>
+          <a-col :xs="24" :md="8"><a-form-item label="点券"><a-input-number v-model="form.ceraPoint" :min="0" :max="2147483647" style="width: 100%" /></a-form-item></a-col>
+          <a-col :xs="24" :md="8"><a-form-item label="邮件说明"><a-input v-model="form.message" /></a-form-item></a-col>
         </a-row>
         <div class="items-heading"><strong>发放物品</strong><a-button size="small" @click="addItem">添加物品</a-button></div>
         <div class="items-help">
@@ -135,7 +135,7 @@ onMounted(loadCharacters);
           <span>数量为邮件中的物品数量；强化和锻造填写等级；最高品级仅对装备生效，按 100% 品质发送。</span>
         </div>
         <div v-for="(item, index) in form.items" :key="index" class="item-editor">
-          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="300" @change="(value) => onItemChange(item, value)" /></div>
+          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="100%" @change="(value) => onItemChange(item, value)" /></div>
           <div class="item-field"><span class="field-label">数量</span><a-input-number v-model="item.quantity" :min="1" :max="100000" /></div>
           <div class="item-field"><span class="field-label">强化等级</span><a-input-number v-model="item.upgrade" :min="0" :max="31" /></div>
           <div class="item-field"><span class="field-label">锻造等级</span><a-input-number v-model="item.separateUpgrade" :min="0" :max="31" /></div>
@@ -164,4 +164,10 @@ onMounted(loadCharacters);
 .seal-field { min-width: 92px; }
 .submit-row { display: flex; justify-content: flex-end; margin-top: 18px; }
 @media (max-width: 900px) { .reward-page { padding: 8px; } }
+@media (max-width: 640px) {
+  .item-editor { align-items: stretch; }
+  .item-editor-main { flex-basis: 100%; min-width: 100%; }
+  .item-field { flex: 1 1 calc(50% - 10px); min-width: 120px; }
+  .submit-row :deep(.arco-btn) { width: 100%; }
+}
 </style>

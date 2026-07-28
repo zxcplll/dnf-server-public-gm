@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { Message } from '@arco-design/web-vue';
 import Request from '../../../api/Request';
 import ItemPicker from '../../../components/ItemPicker.vue';
 import ItemImg from '../../../components/ItemImg.vue';
@@ -41,7 +40,7 @@ const load = async (resetPage = false) => {
     };
     filters.page = result.value.page;
   } catch (error: any) {
-    Message.error(error?.message || '邮件查询失败');
+    Request.showError(error, '邮件查询失败');
   } finally {
     loading.value = false;
   }
@@ -79,12 +78,12 @@ onMounted(load);
   <div class="mail-page">
     <a-card>
       <template #title>邮件查询</template>
-      <a-form layout="inline" :model="filters">
+      <a-form class="gm-filter-form" layout="inline" :model="filters">
         <a-form-item label="发件人"><a-input v-model="filters.sender" allow-clear placeholder="GM后台或角色名" /></a-form-item>
         <a-form-item label="收件人"><a-input v-model="filters.receiver" allow-clear placeholder="角色名或角色UID" /></a-form-item>
         <a-form-item label="道具"><ItemPicker v-model="itemFilter" width="220" @change="(item) => filters.itemId = item?.id" /></a-form-item>
         <a-form-item label="相关信息"><a-input v-model="filters.keyword" allow-clear placeholder="邮件ID、正文或发件人" /></a-form-item>
-        <a-form-item>
+        <a-form-item class="gm-filter-actions">
           <a-space><a-button type="primary" @click="load(true)">查询</a-button><a-button @click="clearFilters">重置</a-button></a-space>
         </a-form-item>
       </a-form>
@@ -123,7 +122,7 @@ onMounted(load);
           <a-table-column title="是否领取" :width="95"><template #cell="{ record }"><a-tag :color="record.claimed ? 'green' : 'gray'">{{ record.claimed ? '已领取' : '未领取' }}</a-tag></template></a-table-column>
         </template>
       </a-table>
-      <div class="pagination-row"><a-pagination :current="filters.page" :page-size="filters.pageSize" :total="result.totalSize" show-total show-jumper show-page-size :page-size-options="[20, 50, 100]" @change="onPageChange" @page-size-change="onPageSizeChange" /></div>
+      <div class="gm-pagination-row"><a-pagination :current="filters.page" :page-size="filters.pageSize" :total="result.totalSize" show-total show-jumper show-page-size :page-size-options="[20, 50, 100]" @change="onPageChange" @page-size-change="onPageSizeChange" /></div>
     </a-card>
   </div>
 </template>
@@ -131,7 +130,6 @@ onMounted(load);
 <style scoped lang="less">
 .mail-page { padding: 16px; }
 .table-card { margin-top: 12px; }
-.pagination-row { display: flex; justify-content: flex-end; margin-top: 14px; }
 .item-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .item-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-id { color: var(--color-text-3); font-size: 11px; }

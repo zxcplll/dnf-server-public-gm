@@ -11,30 +11,128 @@ import com.aiyi.game.dnfserver.pvf.PvfManager;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 public class GmFeatureServiceTest {
 
+    private static final String LEGACY_ONLINE_REWARD_NAME = "\u00e6\u00b2\u00b9\u00e8\u2026\u00bb\u00e7\u0161\u201e\u00e5\u00b8\u02c6\u00e5\u00a7\u0090";
+
     @Test
-    public void sendsOnlineRewardGoldDirectlyToInventoryWithoutMail() {
+    public void monitorUsesCharacterStatsForTodayActivityAndIncludesLevels() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Number.class))).thenReturn(0);
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(Collections.<Map<String, Object>>emptyList());
+
+        service.monitor();
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, times(2)).queryForList(sql.capture());
+        List<String> queries = sql.getAllValues();
+        assertTrue(queries.get(0).contains("c.lev AS level"));
+        assertTrue(queries.get(1).contains("c.lev AS level"));
+        assertTrue(queries.get(1).startsWith("SELECT DISTINCT"));
+        assertTrue(queries.get(1).contains("JOIN taiwan_cain.charac_stat s ON s.charac_no=c.charac_no"));
+        assertTrue(queries.get(1).contains("s.last_play_time >= CURDATE()"));
+        assertTrue(queries.get(1).contains("ORDER BY s.last_play_time DESC"));
+    }
+
+    @Test
+    public void monitorReportsHostPhysicalMemoryCapacity() {
+        java.lang.management.OperatingSystemMXBean os =
+                java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+        org.junit.Assume.assumeTrue(os instanceof com.sun.management.OperatingSystemMXBean);
+        long expectedTotal = ((com.sun.management.OperatingSystemMXBean) os).getTotalPhysicalMemorySize();
+
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Number.class))).thenReturn(0);
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(Collections.<Map<String, Object>>emptyList());
+
+        Map<String, Object> result = service.monitor();
+        Map<?, ?> current = (Map<?, ?>) result.get("current");
+
+        assertEquals(expectedTotal, ((Number) current.get("memoryTotal")).longValue());
+        assertTrue(((Number) current.get("memoryUsed")).longValue() <= expectedTotal);
+    }
+
+    @Test
+    public void linuxMemoryUsageUsesMemAvailableInsteadOfMemFree() {
+        GmFeatureService service = new GmFeatureService();
+        List<String> meminfo = Arrays.asList(
+                "MemTotal:       16384000 kB",
+                "MemFree:          200000 kB",
+                "MemAvailable:   12000000 kB",
+                "Buffers:          100000 kB",
+                "Cached:          4000000 kB"
+        );
+
+        long[] memory = ReflectionTestUtils.invokeMethod(service, "parseProcMeminfo", meminfo);
+
+        assertEquals(16384000L * 1024L, memory[1]);
+        assertEquals((16384000L - 12000000L) * 1024L, memory[0]);
+    }
+
+    @Test
+    public void normalizesPersistedOnlineRewardProgressCharacterNames() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("characName", LEGACY_ONLINE_REWARD_NAME);
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(Collections.singletonList(row));
+        when(jdbcTemplate.queryForObject(anyString(), eq(Number.class))).thenReturn(0);
+
+        Map<String, Object> result = service.getOnlineReward();
+        List<?> progress = (List<?>) result.get("progress");
+
+        assertEquals("\u6cb9\u817b\u7684\u5e08\u59d0", ((Map<?, ?>) progress.get(0)).get("characName"));
+    }
+
+    @Test
+    public void normalizesPersistedOnlineRewardLogCharacterNames() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("characName", LEGACY_ONLINE_REWARD_NAME);
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(Collections.singletonList(row));
+
+        List<Map<String, Object>> logs = service.listOnlineRewardLogs(1, 20);
+
+        assertEquals("\u6cb9\u817b\u7684\u5e08\u59d0", logs.get(0).get("characName"));
+    }
+
+    @Test
+    public void sendsOnlineRewardGoldThroughGameRuntimeWithoutMailOrDatabaseWrite() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         PostalService postalService = mock(PostalService.class);
+        GameRuntimeClient gameRuntimeClient = mock(GameRuntimeClient.class);
         GmFeatureService service = new GmFeatureService();
         ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
         ReflectionTestUtils.setField(service, "postalService", postalService);
-        when(jdbcTemplate.update(anyString(), eq(500), eq(1))).thenReturn(1);
+        ReflectionTestUtils.setField(service, "gameRuntimeClient", gameRuntimeClient);
+        when(gameRuntimeClient.addGold("online-gold-1-1700000000000", 42, 1, 500))
+                .thenReturn(new GameRuntimeClient.GoldChange(1, 1000, 500, 1500));
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("targetType", "CHARACTERS");
@@ -43,15 +141,137 @@ public class GmFeatureServiceTest {
         payload.put("gold", 500);
         payload.put("ceraPoint", 0);
         payload.put("directGold", true);
+        payload.put("runtimeAccountId", 42);
+        payload.put("runtimeRequestId", "online-gold-1-1700000000000");
 
         Map<String, Object> result = service.dispatchReward(payload, "online-reward");
 
-        verify(jdbcTemplate).update(
-                "UPDATE taiwan_cain_2nd.inventory SET money=LEAST(4294967295, money+?) WHERE charac_no=?",
-                500,
-                1);
+        verify(gameRuntimeClient).addGold("online-gold-1-1700000000000", 42, 1, 500);
+        verifyZeroInteractions(jdbcTemplate);
         verifyZeroInteractions(postalService);
         assertEquals(0, result.get("mailCount"));
+        assertEquals(1500L, result.get("goldAfter"));
+    }
+
+    @Test
+    public void scheduledOnlineRewardUsesAccountAndStableDueTimeForRuntimeRequest() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        PostalService postalService = mock(PostalService.class);
+        GameRuntimeClient gameRuntimeClient = mock(GameRuntimeClient.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        ReflectionTestUtils.setField(service, "postalService", postalService);
+        ReflectionTestUtils.setField(service, "gameRuntimeClient", gameRuntimeClient);
+
+        Date onlineSince = new Date(System.currentTimeMillis() - 300000L);
+        Date lastAward = new Date(System.currentTimeMillis() - 120000L);
+        long dueAt = lastAward.getTime() + 60000L;
+        Map<String, Object> settings = new LinkedHashMap<>();
+        settings.put("enabled", 1);
+        settings.put("interval_minutes", 1);
+        settings.put("cera_point", 0);
+        settings.put("gold", 500);
+        Map<String, Object> player = new LinkedHashMap<>();
+        player.put("characNo", 1);
+        player.put("characName", "test");
+        player.put("uid", 42);
+        Map<String, Object> progress = new LinkedHashMap<>();
+        progress.put("online_since", onlineSince);
+        progress.put("last_award_at", lastAward);
+
+        when(jdbcTemplate.queryForList(anyString())).thenAnswer(invocation -> {
+            String sql = invocation.getArgument(0);
+            if (sql.contains("gm_online_reward_setting WHERE id=1")) {
+                return Collections.singletonList(settings);
+            }
+            if (sql.contains("FROM taiwan_cain.charac_info c WHERE c.delete_flag=0")) {
+                return Collections.singletonList(player);
+            }
+            if (sql.contains("SELECT online_since,last_award_at")) {
+                return Collections.singletonList(progress);
+            }
+            return Collections.emptyList();
+        });
+        when(gameRuntimeClient.addGold("online-gold-1-" + dueAt, 42, 1, 500))
+                .thenReturn(new GameRuntimeClient.GoldChange(1, 1000, 500, 1500));
+        when(gameRuntimeClient.findOnlineCharacter(42))
+                .thenReturn(new GameRuntimeClient.OnlineCharacter(42, 1, 1000));
+
+        ReflectionTestUtils.invokeMethod(service, "processOnlineReward");
+
+        verify(gameRuntimeClient).addGold("online-gold-1-" + dueAt, 42, 1, 500);
+        verify(gameRuntimeClient).findOnlineCharacter(42);
+        verifyZeroInteractions(postalService);
+    }
+
+    @Test
+    public void scheduledOnlineRewardSkipsOtherCharactersOnTheSameOnlineAccount() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        PostalService postalService = mock(PostalService.class);
+        GameRuntimeClient gameRuntimeClient = mock(GameRuntimeClient.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        ReflectionTestUtils.setField(service, "postalService", postalService);
+        ReflectionTestUtils.setField(service, "gameRuntimeClient", gameRuntimeClient);
+
+        Date onlineSince = new Date(System.currentTimeMillis() - 300000L);
+        Date lastAward = new Date(System.currentTimeMillis() - 120000L);
+        long dueAt = lastAward.getTime() + 60000L;
+        Map<String, Object> settings = new LinkedHashMap<>();
+        settings.put("enabled", 1);
+        settings.put("interval_minutes", 1);
+        settings.put("cera_point", 0);
+        settings.put("gold", 500);
+        Map<String, Object> active = new LinkedHashMap<>();
+        active.put("characNo", 1);
+        active.put("characName", "active");
+        active.put("uid", 42);
+        Map<String, Object> inactive = new LinkedHashMap<>();
+        inactive.put("characNo", 2);
+        inactive.put("characName", "inactive");
+        inactive.put("uid", 42);
+        Map<String, Object> progress = new LinkedHashMap<>();
+        progress.put("online_since", onlineSince);
+        progress.put("last_award_at", lastAward);
+
+        when(jdbcTemplate.queryForList(anyString())).thenAnswer(invocation -> {
+            String sql = invocation.getArgument(0);
+            if (sql.contains("gm_online_reward_setting WHERE id=1")) {
+                return Collections.singletonList(settings);
+            }
+            if (sql.contains("FROM taiwan_cain.charac_info c WHERE c.delete_flag=0")) {
+                return Arrays.asList(active, inactive);
+            }
+            if (sql.contains("SELECT online_since,last_award_at")) {
+                return Collections.singletonList(progress);
+            }
+            return Collections.emptyList();
+        });
+        when(gameRuntimeClient.findOnlineCharacter(42))
+                .thenReturn(new GameRuntimeClient.OnlineCharacter(42, 1, 1000));
+        when(gameRuntimeClient.addGold("online-gold-1-" + dueAt, 42, 1, 500))
+                .thenReturn(new GameRuntimeClient.GoldChange(1, 1000, 500, 1500));
+
+        ReflectionTestUtils.invokeMethod(service, "processOnlineReward");
+
+        verify(gameRuntimeClient, times(1)).findOnlineCharacter(42);
+        verify(gameRuntimeClient).addGold("online-gold-1-" + dueAt, 42, 1, 500);
+        verifyZeroInteractions(postalService);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void rejectsMultiRecipientDirectRuntimeGold() {
+        GmFeatureService service = new GmFeatureService();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("targetType", "CHARACTERS");
+        payload.put("characterIds", Arrays.asList(1, 2));
+        payload.put("items", Collections.emptyList());
+        payload.put("gold", 500);
+        payload.put("directGold", true);
+        payload.put("runtimeAccountId", 42);
+        payload.put("runtimeRequestId", "multi-role");
+
+        service.dispatchReward(payload, "online-reward");
     }
 
     @Test

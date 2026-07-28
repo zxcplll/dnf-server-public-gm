@@ -55,6 +55,8 @@ const list = ref<PvfItem[]>([]);
 const total = ref(0);
 const page = ref(1);
 const pageSize = ref(30);
+const compactPagination = ref(false);
+let compactPaginationQuery: MediaQueryList | null = null;
 
 const keyword = ref('');
 
@@ -265,7 +267,7 @@ const loadList = async () => {
     list.value = res.data?.list ?? [];
     total.value = res.data?.totalSize ?? 0;
   } catch (e: any) {
-    Message.error(e?.message || '加载失败');
+    Request.showError(e, '加载失败');
   } finally {
     loading.value = false;
   }
@@ -297,12 +299,22 @@ const hoverPos = ref({ x: 0, y: 0 });
 const hoverPanelEl = ref<HTMLElement | null>(null);
 const pointerPos = ref({ x: 0, y: 0 });
 let hoverRafId: number | null = null;
+let hoverSizeObserver: ResizeObserver | null = null;
+let hoverCloseTimer: number | null = null;
+
+const getVisualViewportBounds = () => {
+  const viewport = window.visualViewport;
+  const left = viewport?.offsetLeft || 0;
+  const top = viewport?.offsetTop || 0;
+  const width = viewport?.width || window.innerWidth || document.documentElement.clientWidth;
+  const height = viewport?.height || window.innerHeight || document.documentElement.clientHeight;
+  return { left, top, right: left + width, bottom: top + height };
+};
 
 const positionHoverPanel = () => {
   if (!hoverItem.value) return;
 
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const viewport = getVisualViewportBounds();
   const margin = 12;
   const gap = 16;
   const panelRect = hoverPanelEl.value?.getBoundingClientRect();
@@ -311,17 +323,19 @@ const positionHoverPanel = () => {
 
   const rightX = pointerPos.value.x + gap;
   const leftX = pointerPos.value.x - gap - panelWidth;
-  const preferredX = rightX + panelWidth <= viewportWidth - margin ? rightX : leftX;
-  const maxX = Math.max(margin, viewportWidth - panelWidth - margin);
+  const preferredX = rightX + panelWidth <= viewport.right - margin ? rightX : leftX;
+  const minX = viewport.left + margin;
+  const maxX = Math.max(minX, viewport.right - panelWidth - margin);
 
   const belowY = pointerPos.value.y + gap;
   const aboveY = pointerPos.value.y - gap - panelHeight;
-  const preferredY = belowY + panelHeight <= viewportHeight - margin ? belowY : aboveY;
-  const maxY = Math.max(margin, viewportHeight - panelHeight - margin);
+  const preferredY = belowY + panelHeight <= viewport.bottom - margin ? belowY : aboveY;
+  const minY = viewport.top + margin;
+  const maxY = Math.max(minY, viewport.bottom - panelHeight - margin);
 
   hoverPos.value = {
-    x: Math.max(margin, Math.min(preferredX, maxX)),
-    y: Math.max(margin, Math.min(preferredY, maxY))
+    x: Math.max(minX, Math.min(preferredX, maxX)),
+    y: Math.max(minY, Math.min(preferredY, maxY))
   };
 };
 
@@ -333,14 +347,40 @@ const scheduleHoverPosition = () => {
   });
 };
 
-const updateHoverPos = (evt: MouseEvent) => {
+const clearHoverCloseTimer = () => {
+  if (hoverCloseTimer == null) return;
+  window.clearTimeout(hoverCloseTimer);
+  hoverCloseTimer = null;
+};
+
+const showHover = (item: PvfItem, evt: MouseEvent) => {
+  clearHoverCloseTimer();
   pointerPos.value = { x: evt.clientX, y: evt.clientY };
-  scheduleHoverPosition();
+  hoverItem.value = item;
+};
+
+const scheduleHoverClose = () => {
+  clearHoverCloseTimer();
+  hoverCloseTimer = window.setTimeout(() => {
+    hoverCloseTimer = null;
+    hoverItem.value = null;
+  }, 180);
+};
+
+const closeHover = () => {
+  clearHoverCloseTimer();
+  hoverItem.value = null;
 };
 
 watch(hoverItem, async (item) => {
+  hoverSizeObserver?.disconnect();
+  hoverSizeObserver = null;
   if (!item) return;
   await nextTick();
+  if (hoverPanelEl.value && typeof ResizeObserver !== 'undefined') {
+    hoverSizeObserver = new ResizeObserver(() => scheduleHoverPosition());
+    hoverSizeObserver.observe(hoverPanelEl.value);
+  }
   scheduleHoverPosition();
 });
 
@@ -453,8 +493,7 @@ const handleFileUpload = async (event: Event) => {
     await loadPvfInfo();
     await loadList();
   } catch (error: any) {
-    const message = error?.response?.data?.message || error?.message || 'PVF上传失败';
-    Message.error(message);
+    Request.showError(error, 'PVF上传失败');
   } finally {
     uploading.value = false;
     // reset input so selecting the same file again triggers change
@@ -478,9 +517,15 @@ const measureHeights = () => {
   const body = bodyEl.value;
   if (!body) return;
 
-  const bodyH = Math.max(200, Math.floor(body.getBoundingClientRect().height));
-
   const leftTitleH = leftTitleEl.value?.getBoundingClientRect().height ?? 0;
+  if (window.matchMedia('(max-width: 760px)').matches) {
+    const viewportH = window.visualViewport?.height || window.innerHeight || 844;
+    leftScrollH.value = Math.max(160, Math.floor(230 - 24 - leftTitleH));
+    rightScrollH.value = Math.max(320, Math.min(480, Math.floor(viewportH * 0.5)));
+    return;
+  }
+
+  const bodyH = Math.max(200, Math.floor(body.getBoundingClientRect().height));
   leftScrollH.value = Math.max(160, Math.floor(bodyH - leftTitleH));
 
   const toolbarH = toolbarEl.value?.getBoundingClientRect().height ?? 0;
@@ -504,26 +549,47 @@ const scheduleMeasure = () => {
 
 let ro: ResizeObserver | null = null;
 
+const resolveObservedElement = (value: unknown): Element | null => {
+  const candidate = (value as { $el?: unknown } | null)?.$el ?? value;
+  return candidate instanceof Element ? candidate : null;
+};
+
+const syncCompactPagination = () => {
+  compactPagination.value = compactPaginationQuery?.matches ?? false;
+  scheduleMeasure();
+};
+
 onMounted(async () => {
+  compactPaginationQuery = window.matchMedia('(max-width: 760px)');
+  syncCompactPagination();
+  compactPaginationQuery.addEventListener?.('change', syncCompactPagination);
+
   await nextTick();
   measureHeights();
 
   // 监听高度变化（窗口 resize、tab 切换、字体加载、alert 折行等）
   ro = new ResizeObserver(() => scheduleMeasure());
-  if (rootEl.value) ro.observe(rootEl.value);
-  if (bodyEl.value) ro.observe(bodyEl.value);
-  if (headerEl.value) ro.observe(headerEl.value);
-  if (alertEl.value) ro.observe(alertEl.value);
-  if (toolbarEl.value) ro.observe(toolbarEl.value);
-  if (paginationEl.value) ro.observe(paginationEl.value);
+  [rootEl.value, bodyEl.value, headerEl.value, alertEl.value, toolbarEl.value, paginationEl.value]
+    .map(resolveObservedElement)
+    .filter((element): element is Element => element !== null)
+    .forEach((element) => ro?.observe(element));
 
   window.addEventListener('resize', scheduleMeasure);
+  window.visualViewport?.addEventListener('resize', scheduleHoverPosition);
+  window.visualViewport?.addEventListener('scroll', scheduleHoverPosition);
 });
 
 onBeforeUnmount(() => {
+  compactPaginationQuery?.removeEventListener?.('change', syncCompactPagination);
+  compactPaginationQuery = null;
   window.removeEventListener('resize', scheduleMeasure);
+  window.visualViewport?.removeEventListener('resize', scheduleHoverPosition);
+  window.visualViewport?.removeEventListener('scroll', scheduleHoverPosition);
+  hoverSizeObserver?.disconnect();
+  hoverSizeObserver = null;
   if (rafId != null) cancelAnimationFrame(rafId);
   if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
+  clearHoverCloseTimer();
   if (ro) {
     ro.disconnect();
     ro = null;
@@ -534,14 +600,14 @@ onMounted(async () => {
   try {
     await loadPvfInfo();
   } catch (e: any) {
-    Message.error(e?.message || 'PVF信息加载失败');
+    Request.showError(e, 'PVF信息加载失败');
   }
   await loadList();
 });
 </script>
 
 <template>
-  <div ref="rootEl" class="pvf-page" @mousemove="updateHoverPos">
+  <div ref="rootEl" class="pvf-page">
     <div ref="headerEl" class="pvf-header">
       <div class="pvf-title">PVF 管理</div>
       <div class="pvf-sub">
@@ -570,7 +636,7 @@ onMounted(async () => {
         <div ref="leftTitleEl" class="left-title">分类</div>
         <a-scrollbar
           class="left-scroll"
-          :style="{ height: (leftScrollH - 26) + 'px' , overflow: 'auto' }"
+          :style="{ height: leftScrollH + 'px' , overflow: 'auto' }"
         >
           <div class="menu-content">
             <div class="category-item" :class="{ active: selectedCategoryKey === allCategory.key }" @click="onSelectCategory(allCategory.key)">
@@ -613,7 +679,7 @@ onMounted(async () => {
 
         <a-scrollbar
           class="list-scroll"
-          :style="{ height: (rightScrollH - 24) + 'px', overflow: 'auto' }"
+          :style="{ height: rightScrollH + 'px', overflow: 'auto' }"
         >
           <div v-if="loading" class="state">加载中...</div>
           <div v-else-if="list.length === 0" class="state">暂无数据</div>
@@ -623,8 +689,8 @@ onMounted(async () => {
               v-for="it in list"
               :key="it.id"
               class="item-row"
-              @mouseenter="hoverItem = it"
-              @mouseleave="hoverItem = null"
+              @mouseenter="showHover(it, $event)"
+              @mouseleave="scheduleHoverClose"
             >
               <div class="item-icon">
                 <ItemImg :icon="(it.icon || { path: '', index: 0 })" :rarity="it.rarity ?? 0" />
@@ -666,13 +732,15 @@ onMounted(async () => {
             :current="page"
             :page-size="pageSize"
             :total="total"
-            :show-jumper="true"
+            :simple="compactPagination"
+            :show-jumper="!compactPagination"
             @change="onPageChange"
           />
         </div>
       </div>
 
-      <div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
+      <Teleport to="body">
+      <div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }" @mouseenter="clearHoverCloseTimer" @mouseleave="closeHover">
         <div class="hover-left">
           <ItemImg :icon="(hoverItem.icon || { path: '', index: 0 })" :rarity="hoverItem.rarity ?? 0" style="width: 48px; height: 48px" />
         </div>
@@ -725,6 +793,7 @@ onMounted(async () => {
           <div class="hover-desc" v-if="hoverItem.description">{{ hoverItem.description.split('%%').join('%').split('\\n').join('\n') }}</div>
         </div>
       </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -1029,21 +1098,64 @@ onMounted(async () => {
 
 .hover-panel {
   position: fixed;
-  z-index: 9999;
-  background: rgba(17, 24, 39, 0.96);
+  z-index: var(--gm-z-inspector, 800);
+  background: rgba(11, 20, 34, 0.98);
   color: #e5e7eb;
   padding: 12px;
-  border-radius: 10px;
+  border: 1px solid rgba(77, 228, 210, .32);
+  border-radius: 8px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
   width: min(420px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
   box-sizing: border-box;
   overflow-y: auto;
   overflow-x: hidden;
-  pointer-events: none;
+  pointer-events: auto;
+  overscroll-behavior: contain;
   display: flex;
   gap: 12px;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .pvf-page {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  .pvf-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .pvf-actions {
+    width: 100%;
+  }
+
+  .pvf-body {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .left {
+    width: 100%;
+    height: 230px;
+    min-height: 230px;
+  }
+
+  .right {
+    min-height: 480px;
+  }
+
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar :deep(.arco-input-wrapper) {
+    width: 100% !important;
+  }
 }
 
 .hover-left {

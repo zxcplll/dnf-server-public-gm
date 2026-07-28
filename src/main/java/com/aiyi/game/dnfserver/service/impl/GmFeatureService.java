@@ -40,6 +40,8 @@ public class GmFeatureService {
     private PostalService postalService;
     @Resource
     private PvfManager pvfManager;
+    @Resource
+    private GameRuntimeClient gameRuntimeClient;
 
     private final Deque<Map<String, Object>> metricHistory = new ConcurrentLinkedDeque<>();
     private final Object onlineRewardLock = new Object();
@@ -97,12 +99,13 @@ public class GmFeatureService {
         Map<String, Object> overview = new LinkedHashMap<>();
         overview.put("totalAccounts", scalar("SELECT COUNT(*) FROM d_taiwan.accounts"));
         overview.put("todayRegistrations", scalar("SELECT COUNT(*) FROM taiwan_cain.charac_info WHERE create_time >= CURDATE()"));
-        overview.put("online", queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid " +
+        overview.put("online", queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid, c.lev AS level " +
                 "FROM taiwan_cain.charac_info c WHERE c.delete_flag=0 AND (" + onlineExists("c.m_id", "taiwan_login.login_account_1") +
                 " OR " + onlineExists("c.m_id", "taiwan_login.login_account_2") +
                 " OR " + onlineExists("c.m_id", "taiwan_login.login_account_3") + ") ORDER BY c.charac_no"));
-        overview.put("todayActive", queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid " +
-                "FROM taiwan_cain.charac_info c WHERE c.last_play_time >= CURDATE() AND c.delete_flag=0 ORDER BY c.last_play_time DESC"));
+        overview.put("todayActive", queryCharacterNames("SELECT DISTINCT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid, c.lev AS level " +
+                "FROM taiwan_cain.charac_info c JOIN taiwan_cain.charac_stat s ON s.charac_no=c.charac_no " +
+                "WHERE c.delete_flag=0 AND s.last_play_time >= CURDATE() ORDER BY s.last_play_time DESC"));
         result.put("overview", overview);
         return result;
     }
@@ -121,6 +124,11 @@ public class GmFeatureService {
         Runtime runtime = Runtime.getRuntime();
         long memoryTotal = runtime.maxMemory();
         long memoryUsed = runtime.totalMemory() - runtime.freeMemory();
+        long[] hostMemory = readHostMemory(os);
+        if (hostMemory != null) {
+            memoryUsed = hostMemory[0];
+            memoryTotal = hostMemory[1];
+        }
         item.put("memoryUsed", memoryUsed);
         item.put("memoryTotal", memoryTotal);
         item.put("memoryPercent", memoryTotal == 0 ? 0D : round(memoryUsed * 100D / memoryTotal));
@@ -145,6 +153,52 @@ public class GmFeatureService {
         metricHistory.addLast(item);
         while (metricHistory.size() > 5760) metricHistory.pollFirst();
         return item;
+    }
+
+    private long[] readHostMemory(java.lang.management.OperatingSystemMXBean os) {
+        try {
+            Path meminfo = Paths.get("/proc/meminfo");
+            if (Files.isReadable(meminfo)) {
+                long[] parsed = parseProcMeminfo(Files.readAllLines(meminfo));
+                if (parsed != null) return parsed;
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Could not read /proc/meminfo: {}", e.getMessage());
+        }
+        if (os instanceof com.sun.management.OperatingSystemMXBean) {
+            com.sun.management.OperatingSystemMXBean sunOs =
+                    (com.sun.management.OperatingSystemMXBean) os;
+            long total = sunOs.getTotalPhysicalMemorySize();
+            long free = sunOs.getFreePhysicalMemorySize();
+            if (total > 0 && free >= 0) {
+                return new long[]{Math.max(0L, total - free), total};
+            }
+        }
+        return null;
+    }
+
+    private long[] parseProcMeminfo(List<String> lines) {
+        long total = -1L;
+        long available = -1L;
+        for (String line : lines) {
+            if (line.startsWith("MemTotal:")) {
+                total = parseMeminfoBytes(line);
+            } else if (line.startsWith("MemAvailable:")) {
+                available = parseMeminfoBytes(line);
+            }
+        }
+        if (total <= 0 || available < 0) return null;
+        return new long[]{Math.max(0L, total - available), total};
+    }
+
+    private long parseMeminfoBytes(String line) {
+        String[] parts = line.trim().split("\\s+");
+        if (parts.length < 2) return -1L;
+        try {
+            return Long.parseLong(parts[1]) * 1024L;
+        } catch (NumberFormatException ignored) {
+            return -1L;
+        }
     }
 
     private long readNetworkSpeedMbps() {
@@ -249,9 +303,9 @@ public class GmFeatureService {
                 onlineExists("c.m_id", "taiwan_login.login_account_1") + " OR " +
                 onlineExists("c.m_id", "taiwan_login.login_account_2") + " OR " +
                 onlineExists("c.m_id", "taiwan_login.login_account_3") + ")"));
-        result.put("progress", querySafe("SELECT charac_no AS characNo,charac_name AS characName,online_since AS onlineSince," +
+        result.put("progress", normalizeCharacterNameRows(querySafe("SELECT charac_no AS characNo,charac_name AS characName,online_since AS onlineSince," +
                 "last_seen_at AS lastSeenAt,last_award_at AS lastAwardAt,award_count AS awardCount " +
-                "FROM dnf_service.gm_online_reward_progress WHERE online_since IS NOT NULL ORDER BY online_since"));
+                "FROM dnf_service.gm_online_reward_progress WHERE online_since IS NOT NULL ORDER BY online_since"), "characName"));
         return result;
     }
 
@@ -274,9 +328,9 @@ public class GmFeatureService {
     public List<Map<String, Object>> listOnlineRewardLogs(int page, int pageSize) {
         page = Math.max(1, page);
         pageSize = Math.min(100, Math.max(1, pageSize));
-        return querySafe("SELECT id,charac_no AS characNo,charac_name AS characName,interval_minutes AS intervalMinutes," +
+        return normalizeCharacterNameRows(querySafe("SELECT id,charac_no AS characNo,charac_name AS characName,interval_minutes AS intervalMinutes," +
                 "cera_point AS ceraPoint,gold,awarded_at AS awardedAt,status,message " +
-                "FROM dnf_service.gm_online_reward_log ORDER BY id DESC LIMIT " + pageSize + " OFFSET " + ((page - 1) * pageSize));
+                "FROM dnf_service.gm_online_reward_log ORDER BY id DESC LIMIT " + pageSize + " OFFSET " + ((page - 1) * pageSize)), "characName");
     }
 
     /**
@@ -299,11 +353,12 @@ public class GmFeatureService {
             } catch (Exception e) {
                 LOGGER.warn("Could not reset offline reward progress: {}", e.getMessage());
             }
-            List<Map<String, Object>> online = querySafe("SELECT c.charac_no AS characNo,c.charac_name AS characName,c.m_id AS uid " +
+            List<Map<String, Object>> onlineCandidates = querySafe("SELECT c.charac_no AS characNo,c.charac_name AS characName,c.m_id AS uid " +
                     "FROM taiwan_cain.charac_info c WHERE c.delete_flag=0 AND (" +
                     onlineExists("c.m_id", "taiwan_login.login_account_1") + " OR " +
                     onlineExists("c.m_id", "taiwan_login.login_account_2") + " OR " +
                     onlineExists("c.m_id", "taiwan_login.login_account_3") + ") ORDER BY c.charac_no");
+            List<Map<String, Object>> online = filterRuntimeOnlineCharacters(onlineCandidates);
             for (Map<String, Object> player : online) {
                 int characNo = intValue(player.get("characNo"), intValue(player.get("CHARACNO"), intValue(player.get("charac_no"), 0)));
                 if (characNo <= 0) continue;
@@ -330,14 +385,17 @@ public class GmFeatureService {
                 reward.put("ceraPoint", ceraPoint);
                 reward.put("directGold", true);
                 reward.put("directCera", true);
+                reward.put("runtimeAccountId", intValue(player.get("uid"), 0));
+                long dueAt = (lastAward == null ? onlineSince.getTime() : lastAward.getTime()) + interval * 60000L;
+                reward.put("runtimeRequestId", "online-gold-" + characNo + "-" + dueAt);
                 reward.put("message", "在线泡点奖励");
                 Date awardAt = new Date();
                 try {
-                    dispatchReward(reward, "在线泡点");
+                    Map<String, Object> dispatchResult = dispatchReward(reward, "在线泡点");
                     jdbcTemplate.update("UPDATE dnf_service.gm_online_reward_progress SET last_award_at=?,award_count=award_count+1,last_seen_at=? WHERE charac_no=?",
                             awardAt, now, characNo);
                     jdbcTemplate.update("INSERT INTO dnf_service.gm_online_reward_log(charac_no,charac_name,interval_minutes,cera_point,gold,awarded_at,status,message) VALUES(?,?,?,?,?,?,?,?)",
-                            characNo, characName, interval, ceraPoint, gold, awardAt, "SUCCESS", "");
+                            characNo, characName, interval, ceraPoint, gold, awardAt, "SUCCESS", runtimeGoldMessage(dispatchResult));
                 } catch (Exception e) {
                     jdbcTemplate.update("INSERT INTO dnf_service.gm_online_reward_log(charac_no,charac_name,interval_minutes,cera_point,gold,awarded_at,status,message) VALUES(?,?,?,?,?,?,?,?)",
                             characNo, characName, interval, ceraPoint, gold, awardAt, "FAILED", e.getMessage() == null ? "" : e.getMessage());
@@ -365,6 +423,30 @@ public class GmFeatureService {
         }
     }
 
+    private List<Map<String, Object>> filterRuntimeOnlineCharacters(List<Map<String, Object>> candidates) {
+        Map<Integer, Map<Integer, Map<String, Object>>> byAccount = new LinkedHashMap<>();
+        for (Map<String, Object> candidate : candidates) {
+            int accountId = intValue(candidate.get("uid"), 0);
+            int characNo = intValue(candidate.get("characNo"),
+                    intValue(candidate.get("charac_no"), 0));
+            if (accountId <= 0 || characNo <= 0) continue;
+            byAccount.computeIfAbsent(accountId, ignored -> new LinkedHashMap<>())
+                    .put(characNo, candidate);
+        }
+
+        List<Map<String, Object>> online = new ArrayList<>();
+        for (Map.Entry<Integer, Map<Integer, Map<String, Object>>> entry : byAccount.entrySet()) {
+            try {
+                GameRuntimeClient.OnlineCharacter current = gameRuntimeClient.findOnlineCharacter(entry.getKey());
+                Map<String, Object> candidate = entry.getValue().get(current.getCharacNo());
+                if (candidate != null) online.add(candidate);
+            } catch (RuntimeException e) {
+                LOGGER.warn("Could not resolve online character for account {}: {}", entry.getKey(), e.getMessage());
+            }
+        }
+        return online;
+    }
+
     public Map<String, Object> dispatchReward(Map<String, Object> payload, String sender) {
         List<Integer> recipients = resolveRecipients(payload);
         List<Map<String, Object>> items = listValue(payload.get("items"));
@@ -372,8 +454,14 @@ public class GmFeatureService {
         int ceraPoint = Math.max(0, intValue(payload.get("ceraPoint"), 0));
         boolean directGold = boolValue(payload.get("directGold"), false);
         boolean directCera = boolValue(payload.get("directCera"), false);
+        int runtimeAccountId = intValue(payload.get("runtimeAccountId"), 0);
+        String runtimeRequestId = stringValue(payload.get("runtimeRequestId"), "");
+        if (directGold && recipients.size() != 1) {
+            throw new IllegalArgumentException("Direct runtime gold requires exactly one character");
+        }
         String message = stringValue(payload.get("message"), "GM奖励");
         int sent = 0;
+        GameRuntimeClient.GoldChange goldChange = null;
         for (Integer characNo : recipients) {
             if (items.isEmpty() && gold == 0 && ceraPoint == 0) {
                 continue;
@@ -381,7 +469,8 @@ public class GmFeatureService {
             if (items.isEmpty()) {
                 if (gold > 0) {
                     if (directGold) {
-                        addGold(characNo, gold);
+                        goldChange = gameRuntimeClient.addGold(runtimeRequestId, runtimeAccountId,
+                                characNo, gold);
                     } else {
                         Postal postal = new Postal();
                         postal.setSendCharacName(sender);
@@ -443,6 +532,11 @@ public class GmFeatureService {
         result.put("mailCount", sent);
         result.put("ceraPoint", ceraPoint);
         result.put("message", message);
+        if (goldChange != null) {
+            result.put("goldBefore", goldChange.getBefore());
+            result.put("goldAdded", goldChange.getAdded());
+            result.put("goldAfter", goldChange.getAfter());
+        }
         return result;
     }
 
@@ -483,14 +577,11 @@ public class GmFeatureService {
         }
     }
 
-    private void addGold(int characNo, int amount) {
-        int updated = jdbcTemplate.update(
-                "UPDATE taiwan_cain_2nd.inventory SET money=LEAST(4294967295, money+?) WHERE charac_no=?",
-                amount,
-                characNo);
-        if (updated != 1) {
-            throw new IllegalStateException("Online reward inventory was not updated for character " + characNo);
-        }
+    private String runtimeGoldMessage(Map<String, Object> dispatchResult) {
+        if (!dispatchResult.containsKey("goldAfter")) return "";
+        return "runtime gold: before=" + dispatchResult.get("goldBefore") +
+                ", added=" + dispatchResult.get("goldAdded") +
+                ", after=" + dispatchResult.get("goldAfter");
     }
 
     public Map<String, Object> queryMail(String sender, String receiver, Integer itemId, String keyword, int page, int pageSize) {
@@ -656,11 +747,14 @@ public class GmFeatureService {
     }
 
     private List<Map<String, Object>> queryCharacterNames(String sql) {
-        List<Map<String, Object>> rows = querySafe(sql);
+        return normalizeCharacterNameRows(querySafe(sql), "name");
+    }
+
+    private List<Map<String, Object>> normalizeCharacterNameRows(List<Map<String, Object>> rows, String field) {
         for (Map<String, Object> row : rows) {
-            Object name = row.get("name");
+            Object name = row.get(field);
             if (name != null) {
-                row.put("name", ChinaseUtil.toSimple(String.valueOf(name)));
+                row.put(field, ChinaseUtil.toSimple(String.valueOf(name)));
             }
         }
         return rows;

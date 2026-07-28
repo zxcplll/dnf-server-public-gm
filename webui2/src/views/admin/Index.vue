@@ -13,9 +13,13 @@ let viewportQuery: MediaQueryList | null = null;
 
 const syncViewport = () => {
   const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches;
+  const wasMobile = isMobile.value;
   isMobile.value = mobile;
   if (mobile) collapsed.value = true;
-  if (!mobile) mobileNavOpen.value = false;
+  if (!mobile) {
+    mobileNavOpen.value = false;
+    if (wasMobile) collapsed.value = false;
+  }
 };
 
 const onCollapse = () => {
@@ -186,6 +190,7 @@ const onClickMenuItem = (item: any, _ev?: Event) => {
 };
 
 watch(() => router.currentRoute.value.path, (path) => {
+  if (!path.startsWith('/admin/')) return;
   const item = normalizeAdminPath(path);
   if (selectedKeys.value[0] !== item) onClickMenuItem(item);
 });
@@ -401,6 +406,7 @@ Request.get('api/v1/account?page=1&pageSize=1')
       border-bottom: 1px solid var(--gm-rule);
 
       img {
+        flex: 0 0 32px;
         width: 32px;
         height: 32px;
       }
@@ -418,6 +424,15 @@ Request.get('api/v1/account?page=1&pageSize=1')
 
     :deep(.arco-menu) {
       background: transparent;
+    }
+
+    :deep(.arco-menu-item-disabled:first-child) {
+      min-height: 64px;
+      margin: 0 !important;
+      padding: 0 !important;
+      border-radius: 0;
+      opacity: 1;
+      background: transparent !important;
     }
 
     :deep(.arco-menu-item),
@@ -519,6 +534,7 @@ Request.get('api/v1/account?page=1&pageSize=1')
       align-items: center;
       flex: 0 0 auto;
       min-width: 0;
+      margin-left: auto;
 
       .right-user-info {
         display: flex;

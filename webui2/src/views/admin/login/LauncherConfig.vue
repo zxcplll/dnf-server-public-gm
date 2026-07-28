@@ -95,9 +95,9 @@ onMounted(loadAll);
 </script>
 
 <template>
-  <a-space direction="vertical" fill size="large">
+  <a-space class="launcher-page" direction="vertical" fill size="large">
     <a-spin :loading="loading" style="width: 100%">
-      <a-card title="核心配置" style="margin: 24px;">
+      <a-card title="核心配置" class="launcher-card">
         <template #extra>
           <a-space>
             <a-button :loading="loading" @click="loadAll">刷新</a-button>
@@ -106,7 +106,7 @@ onMounted(loadAll);
         </template>
         <!-- Arco Form 需要 model 为对象而不是 Ref -->
         <a-form layout="vertical" :model="config">
-          <a-grid :cols="24" :col-gap="12" :row-gap="12">
+          <a-grid class="config-grid" :cols="24" :col-gap="12" :row-gap="12">
             <a-grid-item :span="24">
               <a-form-item label="窗口标题">
                 <a-input v-model="config.title" placeholder="例如 地下城与勇士V1.0" />
@@ -139,12 +139,12 @@ onMounted(loadAll);
         </a-form>
       </a-card>
 
-      <a-card title="登录器背景" style="margin: 24px;">
+      <a-card title="登录器背景" class="launcher-card banner-card">
         <template #extra>
           <a-button type="primary" @click="addBannerRow">新增大图</a-button>
         </template>
 
-        <a-table :data="banners" :pagination="false">
+        <a-table :data="banners" :pagination="false" :scroll="{ x: 960 }">
           <template #empty>
             <div style="text-align: center; padding: 20px;">
               暂无数据
@@ -157,7 +157,7 @@ onMounted(loadAll);
               </template>
             </a-table-column>
 
-            <a-table-column title="图片地址" :ellipsis="true">
+            <a-table-column title="图片地址" :width="360" :ellipsis="true">
               <template #cell="{ record }">
                 <a-input v-model="record.imageUrl" placeholder="图片地址" />
               </template>
@@ -190,6 +190,29 @@ onMounted(loadAll);
   </a-space>
 </template>
 
-<style scoped>
-/* 使用框架默认样式 */
+<style scoped lang="less">
+.launcher-page {
+  width: 100%;
+  padding: 16px;
+}
+
+.launcher-card + .launcher-card {
+  margin-top: 16px;
+}
+
+@media (max-width: 700px) {
+  .launcher-page {
+    padding: 8px;
+  }
+
+  .config-grid :deep(.arco-grid-item) {
+    grid-column: span 24 !important;
+  }
+
+  .launcher-page :deep(.arco-card-header) {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
 </style>

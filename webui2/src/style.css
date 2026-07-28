@@ -14,11 +14,9 @@
   --gm-cyan: #4de4d2;
   --gm-cyan-soft: rgba(77, 228, 210, 0.13);
   --gm-amber: #ffbc68;
-  --gm-z-drawer: 1100;
-  --gm-z-popup: 1700;
-  --gm-z-hover: 1800;
-  --gm-z-dialog: 2000;
-  --gm-z-notice: 2200;
+  --gm-z-drawer: 400;
+  --gm-z-inspector: 800;
+  --gm-z-hover: 1100;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -29,19 +27,25 @@
 .arco-dropdown,
 .arco-select-dropdown,
 .arco-picker-popup,
-.arco-popover-popup {
-  z-index: var(--gm-z-popup) !important;
-}
-
+.arco-popover-popup,
 .arco-modal-wrapper,
-.arco-modal-container,
 .arco-drawer-container {
-  z-index: var(--gm-z-dialog) !important;
-}
-
-.arco-notification-list,
-.arco-message-list {
-  z-index: var(--gm-z-notice) !important;
+  --color-bg-1: #0b1422;
+  --color-bg-2: #101a2a;
+  --color-bg-3: #152238;
+  --color-bg-4: #1b2b43;
+  --color-fill-1: rgba(151, 174, 204, 0.06);
+  --color-fill-2: rgba(151, 174, 204, 0.1);
+  --color-fill-3: rgba(151, 174, 204, 0.15);
+  --color-fill-4: rgba(151, 174, 204, 0.2);
+  --color-text-1: #edf5ff;
+  --color-text-2: #c4d2e3;
+  --color-text-3: #8fa4bf;
+  --color-text-4: #6f849f;
+  --color-border-1: rgba(151, 174, 204, 0.12);
+  --color-border-2: rgba(151, 174, 204, 0.18);
+  --color-border-3: rgba(151, 174, 204, 0.26);
+  --color-border-4: rgba(151, 174, 204, 0.34);
 }
 
 .arco-modal,

@@ -167,7 +167,7 @@ const search = (resetPage = false) => {
 			searchForm.pageNum = (pageResult.value as any).page;
 		}
 	}).catch((e: any) => {
-		Message.error(e?.message || "查询失败");
+		Request.showError(e, "查询失败");
 	}).finally(() => {
 		loading.value = false;
 	});
@@ -225,7 +225,7 @@ const submitEdit = async () => {
 		editOption.value.open = false;
 		search(false);
 	} catch (e: any) {
-		Message.error(e?.message || "修改失败");
+		Request.showError(e, "修改失败");
 	}
 };
 
@@ -283,7 +283,7 @@ const submitSendMail = async () => {
 		Message.success("发送成功, 重新选择角色即可查看邮件");
 		sendMailOption.value.open = false;
 	} catch (e: any) {
-		Message.error(e?.message || "发送失败");
+		Request.showError(e, "发送失败");
 	}
 };
 
@@ -298,7 +298,7 @@ const overTasks = (characNo: number) => {
 				await Request.post(`api/v1/charac/${characNo}/overTasks`);
 				Message.success("操作成功!");
 			} catch (e: any) {
-				Message.error(e?.message || "操作失败");
+				Request.showError(e, "操作失败");
 			}
 		}
 	});
@@ -315,18 +315,19 @@ onMounted(() => {
 <template>
 	<div class="roles-manager">
 		<a-card>
-			<a-form layout="inline" :model="searchForm">
+			<a-form class="gm-filter-form" layout="inline" :model="searchForm">
 				<a-form-item label="账号">
 					<a-input placeholder="所属账号" allow-clear v-model="searchForm.account" />
 				</a-form-item>
 				<a-form-item label="昵称">
 					<a-input placeholder="角色名称" allow-clear v-model="searchForm.name" />
 				</a-form-item>
-				<a-form-item label="等级">
-					<a-input-number v-model="searchForm.minLev" :min="1" :max="86" placeholder="最低等级" style="width: 120px" />
-				</a-form-item>
-				<a-form-item label="~">
-					<a-input-number v-model="searchForm.maxLev" :min="1" :max="86" placeholder="最高等级" style="width: 120px" />
+				<a-form-item label="等级" class="level-filter">
+					<div class="level-range">
+						<a-input-number v-model="searchForm.minLev" :min="1" :max="86" placeholder="最低等级" />
+						<span>~</span>
+						<a-input-number v-model="searchForm.maxLev" :min="1" :max="86" placeholder="最高等级" />
+					</div>
 				</a-form-item>
 				<a-form-item label="职业">
 					<a-select placeholder="选择职业" style="width: 150px" allow-clear v-model="searchForm.job">
@@ -334,7 +335,7 @@ onMounted(() => {
 						<a-option v-for="(job, index) in jobs" :key="index" :label="job.name" :value="index" />
 					</a-select>
 				</a-form-item>
-				<a-form-item>
+				<a-form-item class="gm-filter-actions">
 					<a-button type="primary" @click="search(true)">查询</a-button>
 				</a-form-item>
 			</a-form>
@@ -342,7 +343,7 @@ onMounted(() => {
 
 		<a-table
 			scrollbar
-			:scroll="{ y: windowHeight }"
+			:scroll="{ x: 1040, y: windowHeight }"
 			style="margin-top: 10px;"
 			:data="pageResult.list"
 			:loading="loading"
@@ -354,16 +355,16 @@ onMounted(() => {
 				</div>
 			</template>
 			<template #columns>
-				<a-table-column title="ID" data-index="characNo" />
-				<a-table-column title="昵称" data-index="characName" />
-				<a-table-column title="所属账号" data-index="accountname" />
-				<a-table-column title="职业" data-index="job">
+				<a-table-column title="ID" data-index="characNo" :width="110" />
+				<a-table-column title="昵称" data-index="characName" :width="160" />
+				<a-table-column title="所属账号" data-index="accountname" :width="180" />
+				<a-table-column title="职业" data-index="job" :width="180">
 					<template #cell="{ record }">
 						{{ getJobName(record.job) }}
 					</template>
 				</a-table-column>
-				<a-table-column title="等级" data-index="lev" />
-				<a-table-column title="转职类型" data-index="growType">
+				<a-table-column title="等级" data-index="lev" :width="90" />
+				<a-table-column title="转职类型" data-index="growType" :width="180">
 					<template #cell="{ record }">
 						{{ getGrowTypeName(record.job, record.growType) }}
 					</template>
@@ -385,7 +386,7 @@ onMounted(() => {
 			</template>
 		</a-table>
 
-		<div style="display: flex; justify-content: flex-end; margin-top: 12px;">
+		<div class="gm-pagination-row">
 			<a-pagination
 				:current="searchForm.pageNum"
 				:page-size="searchForm.pageSize"
@@ -501,6 +502,7 @@ onMounted(() => {
 			:title="`发送邮件到: ${sendMailOption.receiveCharacName}`"
 			:width="'min(720px, calc(100vw - 24px))'"
 			:mask-closable="false"
+			:unmount-on-close="true"
 			@ok="submitSendMail"
 			@cancel="sendMailOption.open = false"
 		>
@@ -575,7 +577,18 @@ onMounted(() => {
 
 <style scoped lang="less">
 .roles-manager {
-	padding: 10px;
+	padding: 16px;
+}
+
+.level-range {
+	display: grid;
+	grid-template-columns: 120px auto 120px;
+	align-items: center;
+	gap: 8px;
+
+	:deep(.arco-input-number) {
+		width: 100%;
+	}
 }
 
 .edit-form :deep(.arco-form-item) {
@@ -615,6 +628,20 @@ onMounted(() => {
 }
 
 @media (max-width: 600px) {
+	.roles-manager {
+		padding: 8px;
+	}
+
+	.level-range {
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		width: 100%;
+	}
+
+	.mail-form :deep(.arco-col-6) {
+		flex: 0 0 50%;
+		max-width: 50%;
+	}
+
 	.mail-item-row {
 		align-items: stretch;
 		flex-wrap: wrap;

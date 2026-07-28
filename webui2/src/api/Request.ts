@@ -1,6 +1,6 @@
 import axios from 'axios'
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
-import ArcoVue from '@arco-design/web-vue';
+import { Message } from '@arco-design/web-vue';
 import '@arco-design/web-vue/dist/arco.css';
 import router from "../router";
 
@@ -11,6 +11,24 @@ interface Result<T = any> {
     msg: string
     data: T
 }
+
+const ERROR_DEDUPE_MS = 4000;
+const NOTIFIED_FLAG = '__gmRequestErrorNotified';
+let lastErrorMessage = '';
+let lastErrorAt = 0;
+
+const notifyError = (message: string) => {
+    const now = Date.now();
+    if (message === lastErrorMessage && now - lastErrorAt < ERROR_DEDUPE_MS) return;
+    lastErrorMessage = message;
+    lastErrorAt = now;
+    Message.error(message);
+};
+
+const markNotified = (error: any) => {
+    if (error && typeof error === 'object') error[NOTIFIED_FLAG] = true;
+    return error;
+};
 
 class Request {
     private instance: AxiosInstance
@@ -60,8 +78,9 @@ class Request {
                     return Promise.reject(new Error('Unauthorized'))
                 }else{
                     // 业务逻辑错误（如密码错误），弹出提示
-                    ArcoVue.Message.error(message || '系统未知错误')
-                    return Promise.reject(new Error(message || 'Error'))
+                    const requestError = new Error(message || 'Error')
+                    notifyError(message || '系统未知错误')
+                    return Promise.reject(markNotified(requestError))
                 }
             },
             (error) => {
@@ -83,13 +102,13 @@ class Request {
                         msg = '请求资源不存在 (404)'
                         break
                     case 500:
-                        msg = error.response.data.message || error.message || '服务器内部错误 (500)'
+                        msg = error.response?.data?.message || error.message || '服务器内部错误 (500)'
                         break
                     default:
-                        msg = error.response.data.message || error.message || '网络连接故障'
+                        msg = error.response?.data?.message || error.message || '网络连接故障'
                 }
-                ArcoVue.Message.error(msg)
-                return Promise.reject(error)
+                notifyError(msg)
+                return Promise.reject(markNotified(error))
             }
         )
     }
@@ -110,6 +129,13 @@ class Request {
 
     public delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<Result<T>> {
         return this.instance.delete(url, config)
+    }
+
+    public showError(error: any, fallback: string): void {
+        if (error?.[NOTIFIED_FLAG]) return
+        const message = error?.response?.data?.message || error?.message || fallback
+        notifyError(message)
+        markNotified(error)
     }
 }
 

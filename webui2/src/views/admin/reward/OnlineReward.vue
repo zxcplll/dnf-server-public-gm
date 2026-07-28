@@ -66,7 +66,7 @@ const load = async (showInitial = false) => {
     updatedAt.value = setting.updatedAt ?? setting.updated_at;
     logs.value = Array.isArray(logResponse.data) ? logResponse.data : (logResponse.data?.list || []);
   } catch (error: any) {
-    Message.error(error?.message || '在线泡点配置加载失败');
+    Request.showError(error, '在线泡点配置加载失败');
   } finally {
     initialLoading.value = false;
   }
@@ -84,7 +84,7 @@ const save = async () => {
     Message.success('在线泡点设置已保存');
     await load();
   } catch (error: any) {
-    Message.error(error?.message || '在线泡点设置保存失败');
+    Request.showError(error, '在线泡点设置保存失败');
   } finally {
     saving.value = false;
   }
@@ -110,7 +110,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
           <h2>在线泡点</h2>
           <p>玩家连续在线达到设定时长后，自动发放点券和金币。</p>
         </div>
-        <a-tag :color="form.enabled ? 'green' : 'gray'">{{ form.enabled ? '运行中' : '已关闭' }}</a-tag>
+        <a-tag class="status-tag" :class="form.enabled ? 'status-running' : 'status-stopped'">{{ form.enabled ? '运行中' : '已关闭' }}</a-tag>
       </div>
 
       <a-row :gutter="16" class="summary-row">
@@ -133,7 +133,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
       </a-card>
 
       <a-card title="在线角色计时" class="table-card">
-        <a-table :data="progressRows" :pagination="false" :loading="initialLoading" row-key="characNo">
+        <a-table :data="progressRows" :pagination="false" :loading="initialLoading" :scroll="{ x: 760 }" row-key="characNo">
           <template #columns>
             <a-table-column title="角色" :width="180"><template #cell="{ record }">{{ record.characName || '-' }} <span class="muted">#{{ record.characNo }}</span></template></a-table-column>
             <a-table-column title="开始计时"><template #cell="{ record }">{{ formatDate(record.onlineSince) }}</template></a-table-column>
@@ -142,41 +142,64 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
             <a-table-column title="累计次数" data-index="awardCount" :width="100" />
           </template>
         </a-table>
-        <a-empty v-if="!initialLoading && progressRows.length === 0" description="暂无在线角色计时记录" />
       </a-card>
 
       <a-card title="发放记录" class="table-card">
-        <a-table :data="logRows" :pagination="false" row-key="id">
+        <a-table :data="logRows" :pagination="false" :scroll="{ x: 900 }" row-key="id">
           <template #columns>
             <a-table-column title="角色" :width="180"><template #cell="{ record }">{{ record.characName || '-' }} <span class="muted">#{{ record.characNo }}</span></template></a-table-column>
             <a-table-column title="间隔"><template #cell="{ record }">{{ record.intervalMinutes }} 分钟</template></a-table-column>
             <a-table-column title="点券" data-index="ceraPoint" />
             <a-table-column title="金币" data-index="gold" />
             <a-table-column title="发放时间"><template #cell="{ record }">{{ formatDate(record.awardedAt) }}</template></a-table-column>
-            <a-table-column title="状态"><template #cell="{ record }"><a-tag :color="record.status === 'SUCCESS' ? 'green' : 'red'">{{ record.status === 'SUCCESS' ? '成功' : '失败' }}</a-tag></template></a-table-column>
+            <a-table-column title="状态"><template #cell="{ record }"><a-tag class="status-tag" :class="record.status === 'SUCCESS' ? 'status-running' : 'status-failed'">{{ record.status === 'SUCCESS' ? '成功' : '失败' }}</a-tag></template></a-table-column>
             <a-table-column title="说明" data-index="message" ellipsis tooltip />
           </template>
         </a-table>
-        <a-empty v-if="logRows.length === 0" description="暂无发放记录" />
       </a-card>
     </a-spin>
   </div>
 </template>
 
 <style scoped lang="less">
-.online-reward-page { padding: 16px; background: #f5f7fb; min-height: 100%; }
+.online-reward-page {
+  min-height: 100%;
+  padding: 16px;
+  background-color: var(--gm-bg);
+  background-image:
+    linear-gradient(rgba(151, 174, 204, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(151, 174, 204, .035) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
 .page-heading { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
 .page-heading h2 { margin: 0 0 5px; font-size: 22px; color: var(--color-text-1); }
 .page-heading p { margin: 0; color: var(--color-text-3); font-size: 13px; }
-.summary-row { margin-bottom: 16px; }
-.summary-card { min-height: 112px; padding: 16px; border: 1px solid var(--color-border-2); border-radius: 10px; background: #fff; box-shadow: 0 3px 12px rgba(31,35,41,.04); }
+.summary-row { margin-bottom: 16px; row-gap: 12px; }
+.summary-card {
+  min-height: 112px;
+  padding: 16px;
+  border: 1px solid var(--gm-rule);
+  border-radius: 8px;
+  background: var(--gm-surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .14);
+}
 .summary-card span, .summary-card small { display: block; color: var(--color-text-3); font-size: 12px; }
 .summary-card strong { display: block; margin: 7px 0 3px; color: var(--color-text-1); font-size: 28px; line-height: 1.1; }
 .summary-card em { margin-left: 4px; color: var(--color-text-3); font-size: 12px; font-style: normal; font-weight: 400; }
-.settings-card, .table-card { margin-bottom: 16px; border-radius: 10px; }
+.settings-card, .table-card { margin-bottom: 16px; border-radius: 8px; }
 .settings-form { margin-top: 18px; }
 .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-3); font-size: 12px; }
 .settings-footer i { font-style: normal; color: var(--color-border-3); }
 .muted { color: var(--color-text-3); font-size: 12px; }
-@media (max-width: 700px) { .online-reward-page { padding: 8px; } .settings-footer { align-items: flex-start; flex-direction: column; } .settings-footer .arco-btn { width: 100%; } }
+.status-tag { border: 1px solid transparent; }
+.status-running { border-color: rgba(77, 228, 210, .32); color: var(--gm-cyan); background: var(--gm-cyan-soft); }
+.status-stopped { border-color: var(--gm-rule-strong); color: var(--gm-muted); background: var(--gm-surface-raised); }
+.status-failed { border-color: rgba(255, 125, 141, .34); color: var(--gm-danger); background: rgba(255, 125, 141, .12); }
+
+@media (max-width: 700px) {
+  .online-reward-page { padding: 8px; background-size: 24px 24px; }
+  .page-heading { flex-wrap: wrap; gap: 10px; }
+  .settings-footer { align-items: flex-start; flex-direction: column; }
+  .settings-footer .arco-btn { width: 100%; }
+}
 </style>

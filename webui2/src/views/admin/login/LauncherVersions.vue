@@ -93,19 +93,19 @@ onMounted(loadList);
 </script>
 
 <template>
-  <a-space direction="vertical" fill size="large">
-    <a-alert style="margin: 24px 24px 0 24px; width: calc(100% - 48px);"
+  <a-space class="launcher-page" direction="vertical" fill size="large">
+    <a-alert
         ref="alertEl"
         type="warning"
         :show-icon="true"
-        class="pvf-alert"
+        class="pvf-alert launcher-alert"
     >
       <template #title>注意</template>
       登录器会根据版本号拉取合适的更新列表, 自动依次更新, 因此已经发布不建议删除, 否则会造成过久的客户端丢失版本, 若需撤销版本改动, 建议使用新增的方式上传已撤销改动的版本, 而不是删除历史版本, 因为客户端不会同步已删除/不存在的版本。
     </a-alert>
 
-    <a-card style="margin: 0 24px">
-      <a-grid :cols="24" :col-gap="12" :row-gap="12">
+    <a-card class="launcher-card">
+      <a-grid class="search-grid" :cols="24" :col-gap="12" :row-gap="12">
         <a-grid-item :span="8">
           <a-input
             v-model="keyword"
@@ -128,12 +128,12 @@ onMounted(loadList);
       </a-grid>
     </a-card>
 
-    <a-card title="版本列表" style="margin: 0 24px">
+    <a-card title="版本列表" class="launcher-card">
       <template #extra>
         <a-button type="primary" @click="openCreate">新增</a-button>
       </template>
 
-      <a-table :data="list" :loading="loading" :pagination="false" row-key="id">
+      <a-table :data="list" :loading="loading" :pagination="false" :scroll="{ x: 1080 }" row-key="id">
         <template #empty>
           <div style="text-align: center; padding: 20px;">
             暂无数据
@@ -141,7 +141,7 @@ onMounted(loadList);
         </template>
         <template #columns>
           <a-table-column title="版本" data-index="version" :width="140" />
-          <a-table-column title="下载地址" data-index="downloadUrl" :ellipsis="true" />
+          <a-table-column title="下载地址" data-index="downloadUrl" :width="320" :ellipsis="true" />
           <a-table-column title="强制" :width="90">
             <template #cell="{ record }">
               <a-tag :color="record.forceUpdate === 1 ? 'red' : 'gray'">{{ record.forceUpdate === 1 ? '是' : '否' }}</a-tag>
@@ -152,7 +152,7 @@ onMounted(loadList);
               <a-tag :color="record.enabled === 1 ? 'green' : 'gray'">{{ record.enabled === 1 ? '启用' : '禁用' }}</a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="描述" :ellipsis="true">
+          <a-table-column title="描述" :width="260" :ellipsis="true">
             <template #cell="{ record }">
               {{ record.description || '-' }}
             </template>
@@ -170,7 +170,7 @@ onMounted(loadList);
 
       <a-divider style="margin: 12px 0" />
 
-      <a-space style="width: 100%; justify-content: flex-end" >
+      <a-space class="gm-pagination-row" fill>
         <a-pagination
           :current="page"
           :page-size="pageSize"
@@ -204,6 +204,24 @@ onMounted(loadList);
   </a-space>
 </template>
 
-<style scoped>
-/* 使用框架默认样式 */
+<style scoped lang="less">
+.launcher-page {
+  width: 100%;
+  padding: 16px;
+}
+
+@media (max-width: 700px) {
+  .launcher-page {
+    padding: 8px;
+  }
+
+  .search-grid :deep(.arco-grid-item) {
+    grid-column: span 24 !important;
+    text-align: left !important;
+  }
+
+  .search-grid :deep(.arco-btn) {
+    width: 100%;
+  }
+}
 </style>

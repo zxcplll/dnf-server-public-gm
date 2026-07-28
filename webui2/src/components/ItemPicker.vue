@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {computed, onMounted, onBeforeUnmount, ref, watch, nextTick} from "vue";
 import Request from "../api/Request";
-import {Message} from "@arco-design/web-vue";
 import ItemImg from "./ItemImg.vue";
 
 type ItemIcon = {
@@ -46,6 +45,7 @@ const emit = defineEmits<{
 const popupVisible = ref(false);
 const inputValue = ref("");
 const selectedItem = ref<Item | null>(props.modelValue ?? null);
+const hoverItem = ref<Item | null>(null);
 
 // More robust than `instanceof HTMLElement` (can fail across iframes / proxies)
 const isDomElement = (node: any): node is Element => {
@@ -99,16 +99,19 @@ const getViewportOffset = () => ({
 });
 
 const viewportWidth = ref<number>(getViewportWidth());
+const popupTranslateX = ref(0);
 const updateViewportWidth = () => {
 	viewportWidth.value = getViewportWidth();
 };
 
+const calculatePopupWidth = (width: number) => {
+	const available = Math.max(0, width - VIEWPORT_SIDE_GAP);
+	return width < 284 ? available : Math.min(PANEL_WIDTH, Math.max(260, available));
+};
+
 // Apply height/width to the popup container itself (not only the inner panel)
 const popupStyle = computed(() => {
-	const available = Math.max(0, viewportWidth.value - VIEWPORT_SIDE_GAP);
-	const w = viewportWidth.value < 284
-		? available
-		: Math.min(PANEL_WIDTH, Math.max(260, available));
+	const w = calculatePopupWidth(viewportWidth.value);
 	return {
 		maxHeight: `${panelMaxHeight.value}px`,
 		width: `${w}px`,
@@ -116,6 +119,11 @@ const popupStyle = computed(() => {
 		overflow: "hidden"
 	};
 });
+
+const popupTranslate = computed<[number, number]>(() => [
+	popupTranslateX.value,
+	popupPlacement.value === "tl" ? -6 : 6
+]);
 
 // DOM measured heights (more robust than constant subtraction)
 const rightHeaderEl = ref<HTMLElement | null>(null);
@@ -174,8 +182,15 @@ const updatePopupHeights = (anchorRect?: DOMRect) => {
 	if (typeof window === "undefined") return;
 
 	const viewportH = getViewportHeight();
-	const viewportTop = getViewportOffset().top;
+	const viewportOffset = getViewportOffset();
+	const viewportTop = viewportOffset.top;
 	const viewportBottom = viewportTop + viewportH;
+	const horizontalGap = VIEWPORT_SIDE_GAP / 2;
+	const popupWidth = calculatePopupWidth(viewportWidth.value);
+	const minPopupLeft = viewportOffset.left + horizontalGap;
+	const maxPopupLeft = Math.max(minPopupLeft, viewportOffset.left + viewportWidth.value - horizontalGap - popupWidth);
+	const targetPopupLeft = Math.max(minPopupLeft, Math.min(rect.left, maxPopupLeft));
+	popupTranslateX.value = Math.round(targetPopupLeft - rect.left);
 
 	const viewportGap = 12;
 	const translateY = 6;
@@ -203,11 +218,13 @@ const onTriggerMouseDown = (e: MouseEvent) => {
 	// Always capture the real DOM element as anchor (avoids component/proxy refs)
 	const current = e.currentTarget as HTMLElement | null;
 	if (current) triggerEl.value = current;
+	updateViewportWidth();
 	updatePopupHeights(current ? current.getBoundingClientRect() : undefined);
 };
 
 watch(popupVisible, async (visible) => {
 	if (visible) {
+		updateViewportWidth();
 		await nextTick();
 		measureLayoutHeights();
 		updatePopupHeights();
@@ -217,6 +234,7 @@ watch(popupVisible, async (visible) => {
 		window.visualViewport?.addEventListener("resize", onWindowViewportChange);
 		window.visualViewport?.addEventListener("scroll", onWindowViewportChange);
 	} else {
+		closeHover();
 		cleanupSizeObserver();
 		window.removeEventListener("resize", onWindowViewportChange);
 		window.removeEventListener("scroll", onWindowViewportChange, true);
@@ -246,6 +264,7 @@ onBeforeUnmount(() => {
 	hoverSizeObserver = null;
 	if (rafId != null) cancelAnimationFrame(rafId);
 	if (hoverRafId != null) cancelAnimationFrame(hoverRafId);
+	clearHoverCloseTimer();
 	window.removeEventListener("resize", onWindowViewportChange);
 	window.removeEventListener("scroll", onWindowViewportChange, true);
 	window.visualViewport?.removeEventListener("resize", onWindowViewportChange);
@@ -257,12 +276,13 @@ const list = ref<Item[]>([]);
 const total = ref(0);
 const page = ref(1);
 
-const hoverItem = ref<Item | null>(null);
 const hoverPos = ref({x: 0, y: 0});
 const hoverPanelEl = ref<HTMLElement | null>(null);
 const pointerPos = ref({x: 0, y: 0});
+const hoverZIndex = ref(1100);
 let hoverRafId: number | null = null;
 let hoverSizeObserver: ResizeObserver | null = null;
+let hoverCloseTimer: number | null = null;
 
 const positionHoverPanel = () => {
 	if (!hoverItem.value) return;
@@ -401,9 +421,32 @@ const stackableTypeLabel: Record<string, string> = {
 
 const inputWidth = computed(() => typeof props.width === "number" ? `${props.width}px` : props.width);
 
-const updateHoverPos = (event: MouseEvent) => {
+const clearHoverCloseTimer = () => {
+	if (hoverCloseTimer == null) return;
+	window.clearTimeout(hoverCloseTimer);
+	hoverCloseTimer = null;
+};
+
+const showHover = (item: Item, event: MouseEvent) => {
+	clearHoverCloseTimer();
 	pointerPos.value = {x: event.clientX, y: event.clientY};
-	scheduleHoverPosition();
+	const popup = (event.currentTarget as HTMLElement | null)?.closest(".arco-trigger-popup");
+	const popupZIndex = popup ? Number.parseInt(window.getComputedStyle(popup).zIndex, 10) : Number.NaN;
+	hoverZIndex.value = Number.isFinite(popupZIndex) ? popupZIndex + 1 : 1100;
+	hoverItem.value = item;
+};
+
+const scheduleHoverClose = () => {
+	clearHoverCloseTimer();
+	hoverCloseTimer = window.setTimeout(() => {
+		hoverCloseTimer = null;
+		hoverItem.value = null;
+	}, 180);
+};
+
+const closeHover = () => {
+	clearHoverCloseTimer();
+	hoverItem.value = null;
 };
 
 watch(hoverItem, async (item) => {
@@ -444,7 +487,7 @@ const load = async () => {
 		list.value = res.data?.list ?? [];
 		total.value = res.data?.totalSize ?? 0;
 	} catch (e: any) {
-		Message.error(e?.message || "查询失败");
+		Request.showError(e, "查询失败");
 	} finally {
 		loading.value = false;
 	}
@@ -596,7 +639,7 @@ onMounted(() => {
 			v-model:popup-visible="popupVisible"
 			trigger="click"
 			:position="popupPlacement"
-			:popup-translate="[0, 6]"
+			:popup-translate="popupTranslate"
 			:unmount-on-close="false"
 			:auto-fit-popup-width="false"
 			:auto-fit-position="true"
@@ -617,7 +660,6 @@ onMounted(() => {
 				<div
 					class="item-picker-panel"
 					:style="{ maxHeight: panelMaxHeight + 'px', height: panelMaxHeight + 'px' }"
-					@mousemove="updateHoverPos"
 				>
 					<div class="panel-left" :style="{ height: panelMaxHeight + 'px' }">
 						<div ref="leftTitleEl" class="category-title">分类</div>
@@ -657,12 +699,12 @@ onMounted(() => {
 									v-for="item in list"
 									:key="item.id"
 									class="item-card"
-									@mouseenter="hoverItem = item"
-									@mouseleave="hoverItem = null"
+									@mouseenter="showHover(item, $event)"
+									@mouseleave="scheduleHoverClose"
 									@click="onSelectItem(item)"
 								>
 									<div class="item-icon">
-										<ItemImg :icon="item.icon" :rarity="item.rarity ?? 0" />
+										<ItemImg :icon="item.icon || { path: '', index: 0 }" :rarity="item.rarity ?? 0" />
 									</div>
 									<div class="item-main">
 										<div
@@ -690,9 +732,9 @@ onMounted(() => {
 						</div>
 					</div>
 					<Teleport to="body">
-					<div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px' }">
+					<div v-if="hoverItem" ref="hoverPanelEl" class="hover-panel" :style="{ left: hoverPos.x + 'px', top: hoverPos.y + 'px', zIndex: hoverZIndex }" @mouseenter="clearHoverCloseTimer" @mouseleave="closeHover">
 						<div class="hover-panel-icon-col">
-							<ItemImg :icon="hoverItem.icon" :rarity="hoverItem.rarity ?? 0" style="width: 48px; height: 48px;" />
+							<ItemImg :icon="hoverItem.icon || { path: '', index: 0 }" :rarity="hoverItem.rarity ?? 0" style="width: 48px; height: 48px;" />
 						</div>
 						<div class="hover-panel-content-col">
 							<div class="hover-title-row">
@@ -1013,7 +1055,7 @@ onMounted(() => {
 
 .hover-panel {
 	position: fixed;
-	z-index: var(--gm-z-hover, 1800);
+	z-index: var(--gm-z-hover, 1100);
 	background: rgba(11, 20, 34, 0.98);
 	color: #e5e7eb;
 	padding: 12px;
@@ -1024,7 +1066,8 @@ onMounted(() => {
 	box-sizing: border-box;
 	overflow-y: auto;
 	overflow-x: hidden;
-	pointer-events: none;
+	pointer-events: auto;
+	overscroll-behavior: contain;
 	display: flex;
 	flex-direction: row;
 	align-items: flex-start;

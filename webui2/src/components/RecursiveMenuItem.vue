@@ -12,11 +12,11 @@
   <!-- 2. 如果有子节点，渲染为子菜单 (SubMenu) -->
   <template v-else>
     <a-sub-menu :key="item.path">
+      <template #icon v-if="item.meta?.icon">
+        <ruoyi-icon :icon-name="item.meta.icon" />
+      </template>
       <template #title>
-        <span class="menu-entry">
-          <ruoyi-icon v-if="item.meta?.icon" :icon-name="item.meta.icon" />
-          <span class="menu-entry-label">{{ item.meta?.title }}</span>
-        </span>
+        <span class="menu-entry-label">{{ item.meta?.title }}</span>
       </template>
 
       <!-- 核心：递归调用自己 -->

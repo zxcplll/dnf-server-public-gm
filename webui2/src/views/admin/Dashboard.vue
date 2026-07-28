@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { Message } from '@arco-design/web-vue';
 import Request from '../../api/Request';
 import router from '../../router';
 
@@ -14,8 +13,8 @@ const load = async () => {
   try {
     data.value = (await Request.get<any>('/api/v1/gm/monitor')).data || {};
     hasLoaded.value = true;
-  } catch (error: any) {
-    Message.error(error?.message || '首页数据加载失败');
+  } catch {
+    // Request already reports the network error; keep the last rendered data in place.
   } finally {
     loading.value = false;
   }
@@ -46,8 +45,8 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
       </a-row>
 
       <a-row :gutter="14" class="roster-row">
-        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot online"></span>当前在线</span><a-badge :count="(data.overview?.online || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.online || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar online-avatar">{{ String(row.name || '?').slice(0, 1) }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.online || []).length" description="当前没有在线角色" /></div><template #actions><a-button type="text" size="small" @click="goMonitor">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
-        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot today"></span>今日上线</span><a-badge :count="(data.overview?.todayActive || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.todayActive || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar today-avatar">{{ String(row.name || '?').slice(0, 1) }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.todayActive || []).length" description="今日还没有上线角色" /></div><template #actions><a-button type="text" size="small" @click="goMonitor">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
+        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot online"></span>当前在线</span><a-badge :count="(data.overview?.online || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.online || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar level-badge online-avatar">LV.{{ row.level ?? row.lev ?? '-' }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.online || []).length" description="当前没有在线角色" /></div><template #actions><a-button type="text" size="small" @click="goMonitor">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
+        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot today"></span>今日上线</span><a-badge :count="(data.overview?.todayActive || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.todayActive || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar level-badge today-avatar">LV.{{ row.level ?? row.lev ?? '-' }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.todayActive || []).length" description="今日还没有上线角色" /></div><template #actions><a-button type="text" size="small" @click="goMonitor">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
       </a-row>
     </div>
   </a-spin>
@@ -251,6 +250,13 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
 
 .online-avatar { color: var(--gm-cyan); background: var(--gm-cyan-soft); }
 .today-avatar { color: var(--gm-amber); background: var(--gm-amber-soft); }
+.level-badge {
+  flex-basis: 50px;
+  width: 50px;
+  padding: 0 4px;
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: nowrap;
+}
 .name { min-width: 0; overflow: hidden; color: var(--gm-text); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .meta { margin-left: auto; color: var(--gm-subtle); font-size: 12px; white-space: nowrap; }
 

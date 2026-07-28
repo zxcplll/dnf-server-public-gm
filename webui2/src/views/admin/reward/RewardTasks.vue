@@ -96,7 +96,7 @@ const loadCharacters = async () => {
     const response = await Request.get<any>('/api/v1/charac?page=1&pageSize=100');
     characters.value = response.data?.list || [];
   } catch (error: any) {
-    Message.error(error?.message || '角色列表加载失败');
+    Request.showError(error, '角色列表加载失败');
   } finally {
     characterLoading.value = false;
   }
@@ -108,7 +108,7 @@ const load = async () => {
     const response = await Request.get<any[]>('/api/v1/gm/reward/tasks');
     tasks.value = Array.isArray(response.data) ? response.data : [];
   } catch (error: any) {
-    Message.error(error?.message || '定时任务加载失败');
+    Request.showError(error, '定时任务加载失败');
   } finally {
     loading.value = false;
   }
@@ -201,7 +201,7 @@ const save = async () => {
     formVisible.value = false;
     await load();
   } catch (error: any) {
-    Message.error(error?.message || '保存任务失败');
+    Request.showError(error, '保存任务失败');
   } finally {
     saving.value = false;
   }
@@ -213,7 +213,7 @@ const toggle = async (task: any) => {
     Message.success('任务状态已更新');
     await load();
   } catch (error: any) {
-    Message.error(error?.message || '更新任务状态失败');
+    Request.showError(error, '更新任务状态失败');
   }
 };
 
@@ -227,7 +227,7 @@ const remove = (task: any) => {
         Message.success('任务已删除');
         await load();
       } catch (error: any) {
-        Message.error(error?.message || '删除任务失败');
+        Request.showError(error, '删除任务失败');
       }
     }
   });
@@ -241,17 +241,17 @@ onMounted(load);
     <a-card>
       <template #title>定时任务管理</template>
       <template #extra><a-button type="primary" @click="openCreate">新建任务</a-button></template>
-      <a-table :data="tasks" :loading="loading" :pagination="false" row-key="id">
+      <a-table :data="tasks" :loading="loading" :pagination="false" :scroll="{ x: 940 }" row-key="id">
         <template #columns>
-          <a-table-column title="任务名称" data-index="name" />
-          <a-table-column title="发放间隔">
+          <a-table-column title="任务名称" data-index="name" :width="180" />
+          <a-table-column title="发放间隔" :width="130">
             <template #cell="{ record }">每 {{ record.interval_minutes ?? record.intervalMinutes }} 分钟</template>
           </a-table-column>
-          <a-table-column title="发放范围">
+          <a-table-column title="发放范围" :width="130">
             <template #cell="{ record }">{{ targetLabel(record.target_type || record.targetType) }}</template>
           </a-table-column>
-          <a-table-column title="下次执行" data-index="next_run_at" />
-          <a-table-column title="状态">
+          <a-table-column title="下次执行" data-index="next_run_at" :width="180" />
+          <a-table-column title="状态" :width="100">
             <template #cell="{ record }">
               <a-tag :color="Boolean(Number(record.enabled) || record.enabled === true) ? 'green' : 'gray'">
                 {{ Boolean(Number(record.enabled) || record.enabled === true) ? '运行中' : '已关闭' }}
@@ -269,11 +269,10 @@ onMounted(load);
           </a-table-column>
         </template>
       </a-table>
-      <a-empty v-if="!loading && tasks.length === 0" description="暂时没有定时任务" />
     </a-card>
 
-    <a-modal v-model:visible="formVisible" :title="editingId ? '编辑定时任务' : '新建定时任务'" :width="'min(980px, calc(100vw - 24px))'" :mask-closable="false" :ok-loading="saving" @ok="save">
-      <a-form :model="form" layout="vertical">
+    <a-modal v-model:visible="formVisible" :title="editingId ? '编辑定时任务' : '新建定时任务'" :width="'min(980px, calc(100vw - 24px))'" :mask-closable="false" :unmount-on-close="true" :ok-loading="saving" @ok="save">
+      <a-form class="task-form" :model="form" layout="vertical">
         <a-row :gutter="16">
           <a-col :span="10"><a-form-item label="任务名称"><a-input v-model="form.name" placeholder="例如：每日登录福利" /></a-form-item></a-col>
           <a-col :span="7"><a-form-item label="发放间隔（分钟）"><a-input-number v-model="form.intervalMinutes" :min="1" :max="10080" style="width: 100%" /></a-form-item></a-col>
@@ -291,7 +290,7 @@ onMounted(load);
           <span>数量为邮件中的物品数量；强化和锻造填写等级；最高品级仅对装备生效，按 100% 品质发送。</span>
         </div>
         <div v-for="(item, index) in form.items" :key="index" class="item-editor">
-          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="300" @change="(value) => onItemChange(item, value)" /></div>
+          <div class="item-editor-main item-field"><span class="field-label">物品</span><ItemPicker v-model="item.item" width="100%" @change="(value) => onItemChange(item, value)" /></div>
           <div class="item-field"><span class="field-label">数量</span><a-input-number v-model="item.quantity" :min="1" :max="100000" /></div>
           <div class="item-field"><span class="field-label">强化等级</span><a-input-number v-model="item.upgrade" :min="0" :max="31" /></div>
           <div class="item-field"><span class="field-label">锻造等级</span><a-input-number v-model="item.separateUpgrade" :min="0" :max="31" /></div>
@@ -318,4 +317,11 @@ onMounted(load);
 .quality-field { min-width: 92px; }
 .seal-field { min-width: 92px; }
 @media (max-width: 900px) { .reward-page { padding: 8px; } }
+@media (max-width: 640px) {
+  .task-form :deep(.arco-col) { flex: 0 0 100%; max-width: 100%; }
+  .item-editor { align-items: stretch; }
+  .item-editor-main { flex-basis: 100%; min-width: 100%; }
+  .item-editor > .item-field:not(.item-editor-main) { flex: 1 1 calc(50% - 10px); min-width: 120px; }
+  .item-editor :deep(.arco-input-number), .item-editor :deep(.arco-select) { width: 100%; }
+}
 </style>

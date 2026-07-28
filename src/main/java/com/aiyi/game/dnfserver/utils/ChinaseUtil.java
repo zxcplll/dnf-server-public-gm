@@ -9,6 +9,7 @@ import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -147,8 +148,17 @@ public class ChinaseUtil {
         if (value == null || value.isEmpty()) {
             return value;
         }
+        String decoded = decodeUtf8Mojibake(value, Charset.forName("CP1252"));
+        if (decoded != null) {
+            return decoded;
+        }
+        decoded = decodeUtf8MojibakeWithControlBytes(value);
+        return decoded == null ? value : decoded;
+    }
+
+    private static String decodeUtf8Mojibake(String value, Charset sourceCharset) {
         try {
-            ByteBuffer bytes = Charset.forName("CP1252").newEncoder()
+            ByteBuffer bytes = sourceCharset.newEncoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .encode(CharBuffer.wrap(value));
@@ -159,7 +169,37 @@ public class ChinaseUtil {
                     .toString();
             return decoded.equals(value) ? value : decoded;
         } catch (CharacterCodingException ignored) {
-            return value;
+            return null;
+        }
+    }
+
+    private static String decodeUtf8MojibakeWithControlBytes(String value) {
+        CharsetEncoder encoder = Charset.forName("CP1252").newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        ByteBuffer bytes = ByteBuffer.allocate(value.length());
+        try {
+            for (int i = 0; i < value.length(); i++) {
+                char character = value.charAt(i);
+                if (character >= 0x0080 && character <= 0x009F) {
+                    bytes.put((byte) character);
+                    continue;
+                }
+                ByteBuffer encoded = encoder.encode(CharBuffer.wrap(new char[]{character}));
+                if (encoded.remaining() != 1) {
+                    return null;
+                }
+                bytes.put(encoded.get());
+            }
+            bytes.flip();
+            String decoded = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(bytes)
+                    .toString();
+            return decoded.equals(value) ? value : decoded;
+        } catch (CharacterCodingException ignored) {
+            return null;
         }
     }
 

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Message } from '@arco-design/web-vue';
 import Request from '../../../api/Request';
 
 type MetricKey = 'cpu' | 'memoryPercent' | 'storagePercent' | 'networkPercent';
@@ -33,8 +32,8 @@ const load = async () => {
   try {
     data.value = (await Request.get<any>('/api/v1/gm/monitor')).data || {};
     hasLoaded.value = true;
-  } catch (error: any) {
-    Message.error(error?.message || '监控加载失败');
+  } catch {
+    // Request already reports the network error; keep the current metrics visible.
   } finally {
     loading.value = false;
   }
@@ -89,6 +88,15 @@ const bytes = (value: any) => {
   if (amount >= 1024 * 1024) return `${(amount / 1024 / 1024).toFixed(2)} MB/s`;
   return `${(amount / 1024).toFixed(1)} KB/s`;
 };
+const capacity = (value: any) => {
+  const amount = Math.max(0, Number(value || 0));
+  const gibibyte = 1024 ** 3;
+  const tebibyte = 1024 ** 4;
+  if (amount >= tebibyte) return `${(amount / tebibyte).toFixed(1)} TB`;
+  return `${(amount / gibibyte).toFixed(1)} GB`;
+};
+const memoryDetail = computed(() => `${capacity(current.value.memoryUsed)} / ${capacity(current.value.memoryTotal)}`);
+const storageDetail = computed(() => `${capacity(current.value.storageUsed)} / ${capacity(current.value.storageTotal)}`);
 const networkDetail = computed(() => `${bytes(current.value.networkRx)} ↓ / ${bytes(current.value.networkTx)} ↑`);
 const lastUpdated = computed(() => formatTime(current.value.timestamp));
 </script>
@@ -107,8 +115,8 @@ const lastUpdated = computed(() => formatTime(current.value.timestamp));
       <a-space direction="vertical" fill size="large">
         <a-row :gutter="16">
           <a-col :xs="24" :sm="12" :lg="6"><a-card class="metric-card"><div class="metric-card-title">CPU 使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'cpu').toFixed(1) }}% <span>/</span> {{ averageValue('cpu').toFixed(1) }}%</div></a-card></a-col>
-          <a-col :xs="24" :sm="12" :lg="6"><a-card class="metric-card"><div class="metric-card-title">内存使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'memoryPercent').toFixed(1) }}% <span>/</span> {{ averageValue('memoryPercent').toFixed(1) }}%</div></a-card></a-col>
-          <a-col :xs="24" :sm="12" :lg="6"><a-card class="metric-card"><div class="metric-card-title">存储使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'storagePercent').toFixed(1) }}% <span>/</span> {{ averageValue('storagePercent').toFixed(1) }}%</div></a-card></a-col>
+          <a-col :xs="24" :sm="12" :lg="6"><a-card class="metric-card"><div class="metric-card-title">内存使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'memoryPercent').toFixed(1) }}% <span>/</span> {{ averageValue('memoryPercent').toFixed(1) }}%</div><div class="capacity-detail">{{ memoryDetail }}</div></a-card></a-col>
+          <a-col :xs="24" :sm="12" :lg="6"><a-card class="metric-card"><div class="metric-card-title">存储使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'storagePercent').toFixed(1) }}% <span>/</span> {{ averageValue('storagePercent').toFixed(1) }}%</div><div class="capacity-detail">{{ storageDetail }}</div></a-card></a-col>
           <a-col :xs="24" :sm="12" :lg="6"><a-card class="metric-card"><div class="metric-card-title">网络使用率 / 24 小时平均使用率</div><div class="metric-card-value">{{ metricValue(current, 'networkPercent').toFixed(1) }}% <span>/</span> {{ averageValue('networkPercent').toFixed(1) }}%</div><div class="network-detail">{{ networkDetail }}</div></a-card></a-col>
         </a-row>
 
@@ -200,7 +208,7 @@ const lastUpdated = computed(() => formatTime(current.value.timestamp));
 
 .metric-card {
   position: relative;
-  min-height: 120px;
+  min-height: 138px;
   overflow: hidden;
   border-color: var(--gm-rule);
   background: var(--gm-surface);
@@ -241,6 +249,12 @@ const lastUpdated = computed(() => formatTime(current.value.timestamp));
   margin-top: 6px;
   color: var(--gm-cyan);
   font-size: 11px;
+}
+
+.capacity-detail {
+  margin-top: 7px;
+  color: var(--gm-cyan);
+  font: 600 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .chart-shell {
