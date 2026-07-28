@@ -1,13 +1,29 @@
 <script setup lang="ts">
 
-import {nextTick, onMounted, ref} from "vue";
+import {nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import RecursiveMenuItem from "../../components/RecursiveMenuItem.vue";
 import router from "../../router";
 import {ApiGlobalConfig} from "../../api/ApiGlobalConfig.ts";
 import Request from "../../api/Request.ts";
 
 const collapsed = ref(false);
+const isMobile = ref(false);
+const mobileNavOpen = ref(false);
+let viewportQuery: MediaQueryList | null = null;
+
+const syncViewport = () => {
+  const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches;
+  isMobile.value = mobile;
+  if (mobile) collapsed.value = true;
+  if (!mobile) mobileNavOpen.value = false;
+};
+
 const onCollapse = () => {
+  if (isMobile.value) {
+    mobileNavOpen.value = !mobileNavOpen.value;
+    collapsed.value = !mobileNavOpen.value;
+    return;
+  }
   collapsed.value = !collapsed.value;
 };
 const menus = ref([] as any[]);
@@ -111,16 +127,28 @@ menus.value = [
   }
 ];
 
+const normalizeAdminPath = (path: string) => {
+  const normalized = path.replace(/^\/admin/, '');
+  return normalized || '/dashboard';
+};
+
 onMounted(() => {
+  syncViewport();
+  viewportQuery = window.matchMedia('(max-width: 860px)');
+  viewportQuery.addEventListener?.('change', syncViewport);
   nextTick(() => {
     console.log('Menus:', menus.value);
     // 初始化面包屑导航
-    let path = router.currentRoute.value.fullPath;
+    let path = router.currentRoute.value.path;
     if (!path || path.trim() === '/'){
       path = window.location.pathname;
     }
-    onClickMenuItem(path.slice(6));
+    onClickMenuItem(normalizeAdminPath(path));
   });
+});
+
+onBeforeUnmount(() => {
+  viewportQuery?.removeEventListener?.('change', syncViewport);
 });
 
 
@@ -133,6 +161,7 @@ const onClickMenuItem = (item: any, _ev?: Event) => {
   const path = '/admin' + (item.startsWith('/') ? item : `/${item}`);
   breadcrumbList.value = tempBreadcrumbList;
   selectedKeys.value = [item];
+  mobileNavOpen.value = false;
   // 添加到历史记录标签页
   const exists = historyPages.value.find(page => page.path === item);
   if (!exists) {
@@ -156,19 +185,25 @@ const onClickMenuItem = (item: any, _ev?: Event) => {
   }
 };
 
-const searchByFullPath = (path: string, routes: any[], tempBreadcrumbList: string[]): any | null => {
+watch(() => router.currentRoute.value.path, (path) => {
+  const item = normalizeAdminPath(path);
+  if (selectedKeys.value[0] !== item) onClickMenuItem(item);
+});
+
+const searchByFullPath = (path: string, routes: any[], tempBreadcrumbList: string[], parentPath = ''): any | null => {
   if (!tempBreadcrumbList){
     tempBreadcrumbList = ['系统后台'];
   }
   for (let route of routes) {
-    const fullPath = route.fullPath || route.path;
+    const routePath = route.path.startsWith('/') ? route.path : `${parentPath}/${route.path}`;
+    const fullPath = route.fullPath || routePath;
     if (fullPath === path) {
       // 添加当前路由标题到面包屑列表
       tempBreadcrumbList.push(route.meta?.title || '');
       return route;
     }
     if (route.children && route.children.length > 0) {
-      const found = searchByFullPath(path, route.children, tempBreadcrumbList);
+      const found = searchByFullPath(path, route.children, tempBreadcrumbList, fullPath);
       if (found) {
         // 添加当前路由标题到面包屑列表
         // tempBreadcrumbList.unshift(route.meta?.title || '');
@@ -212,6 +247,8 @@ Request.get('api/v1/account?page=1&pageSize=1')
 <div class="admin-page">
   <a-layout class="admin-layout">
     <a-layout-sider
+        class="admin-sider"
+        :class="{ 'mobile-open': mobileNavOpen }"
         hide-trigger
         collapsible
         :collapsed="collapsed"
@@ -240,12 +277,19 @@ Request.get('api/v1/account?page=1&pageSize=1')
         />
       </a-menu>
     </a-layout-sider>
+    <button
+        v-if="mobileNavOpen"
+        class="mobile-nav-backdrop"
+        type="button"
+        aria-label="关闭导航"
+        @click="mobileNavOpen = false"
+    ></button>
     <a-layout class="layout-right">
       <a-layout-header class="layout-header">
-        <div class="toggle-button" @click="onCollapse">
+        <button class="toggle-button" type="button" aria-label="切换导航" @click="onCollapse">
           <icon-menu-unfold v-if="collapsed" />
           <icon-menu-fold v-else />
-        </div>
+        </button>
         <div class="breadcrumb-container">
           <a-breadcrumb :style="{ margin: '16px 0' }">
             <a-breadcrumb-item v-for="item in breadcrumbList">{{item}}</a-breadcrumb-item>
@@ -295,7 +339,7 @@ Request.get('api/v1/account?page=1&pageSize=1')
         </a-tabs>
         <!-- 动态路由视图 -->
         <div class="content-view">
-          <a-scrollbar style="height: 100%;overflow: auto;">
+          <a-scrollbar style="height: 100%;">
             <router-view :key="router.currentRoute.value.fullPath" class="router-viewer"/>
           </a-scrollbar>
         </div>
@@ -309,128 +353,344 @@ Request.get('api/v1/account?page=1&pageSize=1')
 </template>
 
 <style scoped lang="less">
-.admin-page{
+.admin-page {
+  position: relative;
+  width: 100%;
   height: 100vh;
-  .admin-layout {
-    height: 100%;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--gm-bg);
 
-    .logo{
+  .admin-layout,
+  .layout-right,
+  .layout-content,
+  .content-view {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .admin-layout {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .admin-sider {
+    z-index: var(--gm-z-drawer);
+    flex: 0 0 auto;
+    border-right: 1px solid var(--gm-rule);
+    background: #0a111d;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+
+    .left-nav {
+      height: 100%;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(151, 174, 204, .32) transparent;
+    }
+
+    .logo {
       display: flex;
       align-items: center;
       justify-content: center;
       height: 64px;
       flex-direction: row;
-      gap: 8px;
+      gap: 9px;
+      border-bottom: 1px solid var(--gm-rule);
+
       img {
         width: 32px;
         height: 32px;
       }
+
       span {
+        color: var(--gm-text);
+        font-size: 19px;
+        font-weight: 750;
+        letter-spacing: .01em;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        color: white;
-        font-size: 20px;
-        font-weight: bold;
-        vertical-align: middle;
-      }
-    }
-    .left-nav{
-      /deep/.arco-menu-selected{
-        background-color: #1677ff !important;
-        border-radius: 6px;
-
-        &.arco-menu-inline-header {
-          background-color: transparent !important;
-          color: white !important;
-          font-weight: bold;
-          * {
-            color: white !important;
-          }
-        }
-
       }
     }
 
-    .layout-right{
-      height: 100%;
+    :deep(.arco-menu) {
+      background: transparent;
+    }
+
+    :deep(.arco-menu-item),
+    :deep(.arco-menu-inline-header) {
+      min-height: 42px;
+      margin: 3px 8px;
+      border-radius: 6px;
+      color: var(--gm-muted);
+      transition: color 160ms ease, background-color 160ms ease;
+    }
+
+    :deep(.arco-menu-item:hover),
+    :deep(.arco-menu-inline-header:hover) {
+      color: var(--gm-text);
+      background: var(--gm-surface-raised);
+    }
+
+    :deep(.arco-menu-selected) {
+      color: #061118 !important;
+      background: var(--gm-cyan) !important;
+      box-shadow: 0 0 18px rgba(77, 228, 210, .16);
+    }
+
+    :deep(.arco-menu-selected .arco-menu-icon),
+    :deep(.arco-menu-selected .arco-menu-title) {
+      color: #061118 !important;
+    }
+
+    :deep(.arco-menu-inline-header.arco-menu-selected) {
+      color: var(--gm-text) !important;
+      background: var(--gm-surface-raised) !important;
+      box-shadow: inset 3px 0 0 var(--gm-cyan);
+    }
+  }
+
+  .layout-right {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .layout-header {
+    position: relative;
+    z-index: var(--gm-z-header);
+    display: flex;
+    align-items: center;
+    flex: 0 0 58px;
+    height: 58px;
+    min-width: 0;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--gm-rule);
+    background: #0a111d;
+
+    .toggle-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 34px;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--gm-text);
+      background: transparent;
+      cursor: pointer;
+
+      &:hover {
+        border-color: var(--gm-rule-strong);
+        color: var(--gm-cyan);
+        background: var(--gm-cyan-soft);
+      }
+    }
+
+    .breadcrumb-container {
       display: flex;
-      .layout-header{
-        background: var(--color-menu-dark-bg);
-        padding: 0 16px;
+      flex: 1 1 auto;
+      min-width: 0;
+      margin-left: 12px;
+      overflow: hidden;
+
+      :deep(.arco-breadcrumb) {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+
+      :deep(.arco-breadcrumb-item) {
+        color: var(--gm-muted) !important;
+
+        &:last-child {
+          color: var(--gm-text) !important;
+        }
+      }
+    }
+
+    .right {
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+      min-width: 0;
+
+      .right-user-info {
         display: flex;
         align-items: center;
-        height: 55px;
+        min-width: 0;
+        padding: 4px 6px;
+        border-radius: 6px;
+        cursor: pointer;
 
-        .toggle-button{
-          font-size: 20px;
-          cursor: pointer;
-          color: white;
-
-          &:hover{
-            color: dodgerblue;
-          }
+        &:hover {
+          background: var(--gm-surface-raised);
         }
 
-        .breadcrumb-container{
-          flex: 1;
-          margin-left: 16px;
-          display: flex;
-          justify-content: left;
-          /deep/.arco-breadcrumb-item{
-            color: #ccc!important;
-
-            &:last-child {
-              color: white!important;
-            }
-          }
-        }
-
-        .right{
+        .user-info-left {
           display: flex;
           align-items: center;
-          .right-user-info{
-            display: flex;
-            align-items: center;
-            .user-info-left {
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
-            .user-info-right {
-              display: flex;
-              flex-direction: column;
-              justify-content: center;
-            }
-          }
-        }
-      }
-      .layout-content{
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        overflow: hidden;
-
-        .layout-tabs{
-          /deep/.arco-tabs-content{
-            padding-top: 0!important;
-          }
+          justify-content: center;
+          flex: 0 0 auto;
         }
 
-        .content-view{
-          // 填充剩余高度
-          flex: 1;
-          overflow: auto;
+        .user-info-right {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          min-width: 0;
+          max-width: 180px;
+          margin-left: 8px !important;
+          color: var(--gm-text) !important;
 
-          /deep/.arco-scrollbar{
-            height: 100%;
-            overflow: auto;
+          > div {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
         }
       }
     }
   }
 
+  .layout-content {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
 
+    .layout-tabs {
+      z-index: var(--gm-z-tabs);
+      flex: 0 0 48px;
+      min-width: 0;
+      border-bottom: 1px solid var(--gm-rule);
+      background: var(--gm-surface);
+
+      :deep(.arco-tabs-nav) {
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      :deep(.arco-tabs-nav::-webkit-scrollbar) {
+        display: none;
+      }
+
+      :deep(.arco-tabs-tab) {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--gm-muted);
+      }
+
+      :deep(.arco-tabs-tab-active) {
+        color: var(--gm-cyan);
+      }
+
+      :deep(.arco-tabs-content) {
+        padding-top: 0 !important;
+      }
+    }
+
+    .content-view {
+      flex: 1 1 auto;
+      overflow: hidden;
+
+      :deep(.arco-scrollbar) {
+        height: 100%;
+      }
+
+      :deep(.arco-scrollbar-container) {
+        min-width: 0;
+        min-height: 100%;
+        overflow: auto;
+      }
+    }
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    z-index: calc(var(--gm-z-drawer) - 1);
+    inset: 0;
+    display: none;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(2, 7, 13, .68);
+  }
+}
+
+@media (max-width: 860px) {
+  .admin-page {
+    .admin-sider {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 236px !important;
+      transform: translateX(-102%);
+      box-shadow: none;
+
+      &.mobile-open {
+        transform: translateX(0);
+        box-shadow: 18px 0 42px rgba(0, 0, 0, .34);
+      }
+    }
+
+    .mobile-nav-backdrop {
+      display: block;
+    }
+
+    .layout-header {
+      padding: 0 12px;
+
+      .breadcrumb-container {
+        margin-left: 8px;
+      }
+    }
+
+    .layout-tabs :deep(.arco-tabs-tab) {
+      max-width: 132px;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-page {
+    .layout-header {
+      .breadcrumb-container {
+        display: none;
+      }
+
+      .right-user-info {
+        .user-info-right {
+          display: none !important;
+        }
+      }
+    }
+
+    .layout-tabs {
+      flex-basis: 44px;
+    }
+
+    .content-view :deep(.arco-scrollbar-container) {
+      overflow-x: hidden;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-page .admin-sider,
+  .admin-page .arco-btn,
+  .admin-page .toggle-button {
+    transition: none;
+  }
 }
 </style>

@@ -31,6 +31,26 @@
   background: transparent;
 }
 
+.admin-page .menu-entry,
+.admin-page .menu-entry-item {
+  min-width: 0;
+}
+
+.admin-page .menu-entry {
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 10px;
+}
+
+.admin-page .menu-entry-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-page .arco-card,
 .admin-page .arco-table-container,
 .admin-page .arco-form,

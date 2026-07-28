@@ -1,11 +1,11 @@
 <template>
   <!-- 1. 如果没有子节点，或者子节点为空，渲染为普通菜单项 -->
   <template v-if="!item.children || item.children.length === 0">
-    <a-menu-item :key="parseItemFullPath()">
+    <a-menu-item class="menu-entry-item" :key="parseItemFullPath()">
       <template #icon v-if="item.meta?.icon">
         <ruoyi-icon :icon-name="item.meta.icon" />
       </template>
-      {{ item.meta?.title }}
+      <span class="menu-entry-label">{{ item.meta?.title }}</span>
     </a-menu-item>
   </template>
 
@@ -13,9 +13,9 @@
   <template v-else>
     <a-sub-menu :key="item.path">
       <template #title>
-        <span>
+        <span class="menu-entry">
           <ruoyi-icon v-if="item.meta?.icon" :icon-name="item.meta.icon" />
-          {{ item.meta?.title }}
+          <span class="menu-entry-label">{{ item.meta?.title }}</span>
         </span>
       </template>
 
@@ -50,8 +50,7 @@ const parseItemFullPath = () => {
   if (props.item.fullPath) {
     return props.item.fullPath;
   }
-  props.item.fullPath = props.parentPath + (props.item.path.startsWith('/') ? props.item.path : `/${props.item.path}`);
-  return props.item.fullPath;
+  return props.parentPath + (props.item.path.startsWith('/') ? props.item.path : `/${props.item.path}`);
 }
 </script>
 
