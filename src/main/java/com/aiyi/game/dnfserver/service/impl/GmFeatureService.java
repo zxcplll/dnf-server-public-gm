@@ -99,10 +99,11 @@ public class GmFeatureService {
         Map<String, Object> overview = new LinkedHashMap<>();
         overview.put("totalAccounts", scalar("SELECT COUNT(*) FROM d_taiwan.accounts"));
         overview.put("todayRegistrations", scalar("SELECT COUNT(*) FROM taiwan_cain.charac_info WHERE create_time >= CURDATE()"));
-        overview.put("online", queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid, c.lev AS level " +
+        List<Map<String, Object>> onlineCandidates = queryCharacterNames("SELECT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid, c.lev AS level " +
                 "FROM taiwan_cain.charac_info c WHERE c.delete_flag=0 AND (" + onlineExists("c.m_id", "taiwan_login.login_account_1") +
                 " OR " + onlineExists("c.m_id", "taiwan_login.login_account_2") +
-                " OR " + onlineExists("c.m_id", "taiwan_login.login_account_3") + ") ORDER BY c.charac_no"));
+                " OR " + onlineExists("c.m_id", "taiwan_login.login_account_3") + ") ORDER BY c.charac_no");
+        overview.put("online", filterRuntimeOnlineCharacters(onlineCandidates));
         overview.put("todayActive", queryCharacterNames("SELECT DISTINCT c.charac_no AS id, c.charac_name AS name, c.m_id AS uid, c.lev AS level " +
                 "FROM taiwan_cain.charac_info c JOIN taiwan_cain.charac_stat s ON s.charac_no=c.charac_no " +
                 "WHERE c.delete_flag=0 AND s.last_play_time >= CURDATE() ORDER BY s.last_play_time DESC"));
@@ -428,7 +429,7 @@ public class GmFeatureService {
         for (Map<String, Object> candidate : candidates) {
             int accountId = intValue(candidate.get("uid"), 0);
             int characNo = intValue(candidate.get("characNo"),
-                    intValue(candidate.get("charac_no"), 0));
+                    intValue(candidate.get("charac_no"), intValue(candidate.get("id"), 0)));
             if (accountId <= 0 || characNo <= 0) continue;
             byAccount.computeIfAbsent(accountId, ignored -> new LinkedHashMap<>())
                     .put(characNo, candidate);

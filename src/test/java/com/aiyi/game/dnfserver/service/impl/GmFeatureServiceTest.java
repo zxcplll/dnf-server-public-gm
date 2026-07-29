@@ -56,6 +56,47 @@ public class GmFeatureServiceTest {
     }
 
     @Test
+    public void monitorOnlyReturnsTheCharacterReportedOnlineByRuntime() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GameRuntimeClient gameRuntimeClient = mock(GameRuntimeClient.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        ReflectionTestUtils.setField(service, "gameRuntimeClient", gameRuntimeClient);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Number.class))).thenReturn(0);
+
+        Map<String, Object> first = new LinkedHashMap<>();
+        first.put("id", 22);
+        first.put("name", "角色一");
+        first.put("uid", 42);
+        Map<String, Object> online = new LinkedHashMap<>();
+        online.put("id", 23);
+        online.put("name", "礼帽型纽特");
+        online.put("uid", 42);
+        Map<String, Object> third = new LinkedHashMap<>();
+        third.put("id", 26);
+        third.put("name", "角色三");
+        third.put("uid", 42);
+
+        when(jdbcTemplate.queryForList(anyString())).thenAnswer(invocation -> {
+            String sql = invocation.getArgument(0);
+            if (sql.contains("login_account_1") && !sql.contains("charac_stat")) {
+                return Arrays.asList(first, online, third);
+            }
+            return Collections.emptyList();
+        });
+        when(gameRuntimeClient.findOnlineCharacter(42))
+                .thenReturn(new GameRuntimeClient.OnlineCharacter(42, 23, 0));
+
+        Map<String, Object> result = service.monitor();
+        Map<?, ?> overview = (Map<?, ?>) result.get("overview");
+        List<?> rows = (List<?>) overview.get("online");
+
+        assertEquals(1, rows.size());
+        assertEquals(23, ((Map<?, ?>) rows.get(0)).get("id"));
+        verify(gameRuntimeClient, times(1)).findOnlineCharacter(42);
+    }
+
+    @Test
     public void monitorReportsHostPhysicalMemoryCapacity() {
         java.lang.management.OperatingSystemMXBean os =
                 java.lang.management.ManagementFactory.getOperatingSystemMXBean();
