@@ -1,6 +1,10 @@
 package com.aiyi.game.dnfserver.service.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.aiyi.core.exception.ValidationException;
+import com.aiyi.core.util.thread.ThreadUtil;
+import com.aiyi.game.dnfserver.dao.AccountVODao;
+import com.aiyi.game.dnfserver.entity.AccountVO;
 import com.aiyi.game.dnfserver.entity.Postal;
 import com.aiyi.game.dnfserver.entity.common.Item;
 import com.aiyi.game.dnfserver.entity.common.ItemType;
@@ -13,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
@@ -42,6 +47,8 @@ public class GmFeatureService {
     private PvfManager pvfManager;
     @Resource
     private GameRuntimeClient gameRuntimeClient;
+    @Resource
+    private AccountVODao accountVODao;
 
     private final Deque<Map<String, Object>> metricHistory = new ConcurrentLinkedDeque<>();
     private final Object onlineRewardLock = new Object();
@@ -605,6 +612,84 @@ public class GmFeatureService {
         result.put("page", page);
         result.put("totalPageSize", pageSize);
         result.put("list", list);
+        return result;
+    }
+
+    public Map<String, Object> getPlayerMailbox(int characNo) {
+        Map<String, Object> result = findMailboxCharacter(characNo);
+        Number mailCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM taiwan_cain_2nd.postal WHERE receive_charac_no=?",
+                new Object[]{characNo},
+                Number.class);
+        Number letterCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(DISTINCT l.letter_id) FROM taiwan_cain_2nd.letter l " +
+                        "WHERE l.charac_no=? OR l.letter_id IN (SELECT p.letter_id FROM taiwan_cain_2nd.postal p " +
+                        "WHERE p.receive_charac_no=? AND p.letter_id>0)",
+                new Object[]{characNo, characNo},
+                Number.class);
+        result.put("mailCount", mailCount == null ? 0 : mailCount.intValue());
+        result.put("letterCount", letterCount == null ? 0 : letterCount.intValue());
+        return result;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> clearPlayerMailbox(int characNo) {
+        Map<String, Object> character = findMailboxCharacter(characNo);
+        int deletedLetters = jdbcTemplate.update(
+                "DELETE l FROM taiwan_cain_2nd.letter l " +
+                        "WHERE (l.charac_no=? OR EXISTS (SELECT 1 FROM taiwan_cain_2nd.postal p " +
+                        "WHERE p.receive_charac_no=? AND p.letter_id=l.letter_id AND p.letter_id>0)) " +
+                        "AND NOT EXISTS (SELECT 1 FROM taiwan_cain_2nd.postal other " +
+                        "WHERE other.letter_id=l.letter_id AND other.receive_charac_no<>?)",
+                characNo,
+                characNo,
+                characNo);
+        int deletedMails = jdbcTemplate.update(
+                "DELETE FROM taiwan_cain_2nd.postal WHERE receive_charac_no=?",
+                characNo);
+
+        Map<String, Object> result = getPlayerMailbox(characNo);
+        result.put("deletedMailCount", deletedMails);
+        result.put("deletedLetterCount", deletedLetters);
+        LOGGER.info("Cleared mailbox for character {} ({}): {} mail rows, {} letter rows",
+                characNo, character.get("characName"), deletedMails, deletedLetters);
+        return result;
+    }
+
+    private Map<String, Object> findMailboxCharacter(int characNo) {
+        if (characNo <= 0) {
+            throw new ValidationException("角色参数无效");
+        }
+        Long operatorId = ThreadUtil.getUserId();
+        AccountVO operator = operatorId == null ? null : accountVODao.get(operatorId);
+        if (operator == null) {
+            throw new ValidationException("登录账号无效");
+        }
+        StringBuilder sql = new StringBuilder(
+                "SELECT c.charac_no AS characNo,c.charac_name AS characName,c.m_id AS uid," +
+                        "c.lev AS level,a.accountname FROM taiwan_cain.charac_info c " +
+                        "LEFT JOIN d_taiwan.accounts a ON a.UID=c.m_id " +
+                        "WHERE c.charac_no=? AND c.delete_flag=0");
+        List<Object> args = new ArrayList<>();
+        args.add(characNo);
+        if (!operator.isAdmin()) {
+            sql.append(" AND (c.m_id=? OR a.parent_uid=?)");
+            args.add(operator.getUid());
+            args.add(operator.getUid());
+        }
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                sql.toString(),
+                args.toArray());
+        if (rows.isEmpty()) {
+            throw new ValidationException("角色不存在或无权操作");
+        }
+        Map<String, Object> row = rows.get(0);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("characNo", intValue(row.get("characNo"), characNo));
+        result.put("characName", ChinaseUtil.toSimple(stringValue(row.get("characName"), "")));
+        result.put("uid", longValue(row.get("uid"), 0));
+        result.put("accountname", stringValue(row.get("accountname"), ""));
+        result.put("level", intValue(row.get("level"), 0));
         return result;
     }
 

@@ -88,6 +88,10 @@ menus.value = [
       {
         path: 'query',
         meta: { title: '邮件查询', icon: 'home' },
+      },
+      {
+        path: 'player',
+        meta: { title: '玩家邮件管理', icon: 'home' },
       }
     ]
   },

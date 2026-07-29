@@ -88,6 +88,16 @@ public class GmFeatureController {
         return gmFeatureService.queryMail(sender, receiver, itemId, keyword, page, pageSize);
     }
 
+    @GetMapping("mail/player/{characNo}")
+    public Map<String, Object> playerMailbox(@PathVariable int characNo) {
+        return gmFeatureService.getPlayerMailbox(characNo);
+    }
+
+    @DeleteMapping("mail/player/{characNo}")
+    public Map<String, Object> clearPlayerMailbox(@PathVariable int characNo) {
+        return gmFeatureService.clearPlayerMailbox(characNo);
+    }
+
     @GetMapping("backups")
     public Map<String, Object> backups() {
         return mapOf("entries", gmFeatureService.listBackups(), "schedules", gmFeatureService.listBackupSchedules());

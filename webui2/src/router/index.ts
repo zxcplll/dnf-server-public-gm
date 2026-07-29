@@ -197,6 +197,14 @@ const routes: Array<RouteRecordRaw> = [
                         meta: {
                             title: '邮件查询'
                         }
+                    },
+                    {
+                        path: 'player',
+                        name: 'PlayerMailManager',
+                        component: () => import('../views/admin/mail/PlayerMailManager.vue'),
+                        meta: {
+                            title: '玩家邮件管理'
+                        }
                     }
                 ]
             },

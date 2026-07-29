@@ -7,8 +7,12 @@ import com.aiyi.game.dnfserver.entity.equipment.Equipment;
 import com.aiyi.game.dnfserver.entity.stackable.Stackable;
 import com.aiyi.game.dnfserver.dao.PostalDao;
 import com.aiyi.game.dnfserver.dao.AccountDao;
+import com.aiyi.game.dnfserver.dao.AccountVODao;
+import com.aiyi.game.dnfserver.entity.AccountVO;
 import com.aiyi.game.dnfserver.pvf.PvfManager;
+import com.aiyi.core.util.thread.ThreadUtil;
 import org.junit.Test;
+import org.junit.After;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.ArgumentCaptor;
@@ -21,10 +25,15 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -33,6 +42,128 @@ import static org.mockito.Mockito.when;
 public class GmFeatureServiceTest {
 
     private static final String LEGACY_ONLINE_REWARD_NAME = "\u00e6\u00b2\u00b9\u00e8\u2026\u00bb\u00e7\u0161\u201e\u00e5\u00b8\u02c6\u00e5\u00a7\u0090";
+
+    @After
+    public void clearThreadUser() {
+        ThreadUtil.setUserId(null);
+    }
+
+    private void allowMailboxAdmin(GmFeatureService service) {
+        AccountVODao accountVODao = mock(AccountVODao.class);
+        AccountVO operator = new AccountVO();
+        operator.setUid(100L);
+        operator.setAdmin(true);
+        when(accountVODao.get(100L)).thenReturn(operator);
+        ReflectionTestUtils.setField(service, "accountVODao", accountVODao);
+        ThreadUtil.setUserId(100L);
+    }
+
+    @Test
+    public void playerMailboxSummaryReturnsCharacterAndMailCounts() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        allowMailboxAdmin(service);
+
+        Map<String, Object> character = new LinkedHashMap<>();
+        character.put("characNo", 23);
+        character.put("characName", "礼帽型纽特");
+        character.put("uid", 18000013L);
+        character.put("accountname", "player");
+        character.put("level", 19);
+        when(jdbcTemplate.queryForList(contains("FROM taiwan_cain.charac_info"), eq(23)))
+                .thenReturn(Collections.singletonList(character));
+        when(jdbcTemplate.queryForObject(contains("FROM taiwan_cain_2nd.postal"), any(Object[].class), eq(Number.class)))
+                .thenReturn(7);
+        when(jdbcTemplate.queryForObject(contains("FROM taiwan_cain_2nd.letter"), any(Object[].class), eq(Number.class)))
+                .thenReturn(3);
+
+        Map<String, Object> result = service.getPlayerMailbox(23);
+
+        assertEquals(23, result.get("characNo"));
+        assertEquals("礼帽型纽特", result.get("characName"));
+        assertEquals("player", result.get("accountname"));
+        assertEquals(19, result.get("level"));
+        assertEquals(7, result.get("mailCount"));
+        assertEquals(3, result.get("letterCount"));
+    }
+
+    @Test(expected = com.aiyi.core.exception.ValidationException.class)
+    public void clearPlayerMailboxRejectsUnknownCharacter() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        allowMailboxAdmin(service);
+        when(jdbcTemplate.queryForList(contains("FROM taiwan_cain.charac_info"), eq(404)))
+                .thenReturn(Collections.<Map<String, Object>>emptyList());
+
+        service.clearPlayerMailbox(404);
+    }
+
+    @Test
+    public void clearPlayerMailboxDeletesOwnedLettersBeforePostalEntries() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        allowMailboxAdmin(service);
+
+        Map<String, Object> character = new LinkedHashMap<>();
+        character.put("characNo", 23);
+        character.put("characName", "礼帽型纽特");
+        when(jdbcTemplate.queryForList(contains("FROM taiwan_cain.charac_info"), eq(23)))
+                .thenReturn(Collections.singletonList(character));
+        when(jdbcTemplate.update(contains("DELETE l FROM taiwan_cain_2nd.letter"), eq(23), eq(23), eq(23)))
+                .thenReturn(2);
+        when(jdbcTemplate.update(contains("DELETE FROM taiwan_cain_2nd.postal"), eq(23)))
+                .thenReturn(5);
+
+        Map<String, Object> result = service.clearPlayerMailbox(23);
+
+        org.mockito.InOrder order = inOrder(jdbcTemplate);
+        order.verify(jdbcTemplate).update(contains("DELETE l FROM taiwan_cain_2nd.letter"), eq(23), eq(23), eq(23));
+        order.verify(jdbcTemplate).update(contains("DELETE FROM taiwan_cain_2nd.postal"), eq(23));
+        assertEquals(5, result.get("deletedMailCount"));
+        assertEquals(2, result.get("deletedLetterCount"));
+        assertEquals(0, result.get("mailCount"));
+        assertEquals(0, result.get("letterCount"));
+        assertEquals("礼帽型纽特", result.get("characName"));
+    }
+
+    @Test
+    public void clearPlayerMailboxRejectsCharacterOutsideOperatorScope() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        AccountVODao accountVODao = mock(AccountVODao.class);
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        ReflectionTestUtils.setField(service, "accountVODao", accountVODao);
+
+        AccountVO operator = new AccountVO();
+        operator.setUid(100L);
+        operator.setAdmin(false);
+        when(accountVODao.get(100L)).thenReturn(operator);
+        when(jdbcTemplate.queryForList(
+                contains("AND (c.m_id=? OR a.parent_uid=?)"),
+                eq(23),
+                eq(100L),
+                eq(100L)))
+                .thenReturn(Collections.<Map<String, Object>>emptyList());
+
+        ThreadUtil.setUserId(100L);
+        try {
+            service.clearPlayerMailbox(23);
+            fail("Expected an out-of-scope mailbox to be rejected");
+        } catch (com.aiyi.core.exception.ValidationException expected) {
+            assertTrue(expected.getMessage().contains("无权"));
+        } finally {
+            ThreadUtil.setUserId(null);
+        }
+        verify(jdbcTemplate).queryForList(
+                contains("AND (c.m_id=? OR a.parent_uid=?)"),
+                eq(23),
+                eq(100L),
+                eq(100L));
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
 
     @Test
     public void monitorUsesCharacterStatsForTodayActivityAndIncludesLevels() {
