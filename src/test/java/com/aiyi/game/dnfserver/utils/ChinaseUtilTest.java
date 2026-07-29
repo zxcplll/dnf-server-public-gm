@@ -27,6 +27,11 @@ public class ChinaseUtilTest {
     }
 
     @Test
+    public void encodesLegacyUtf8MojibakeWithLatin1ControlByte() {
+        assertEquals(LEGACY_MOJIBAKE_WITH_CONTROL_BYTE, ChinaseUtil.toTraditional("\u4e01"));
+    }
+
+    @Test
     public void decodesLegacyUtf8MojibakeWithMixedCp1252AndControlBytes() {
         assertEquals("\u6210\u957f\u80f6\u56ca\u6d3b\u52a8", ChinaseUtil.toSimple(LEGACY_MOJIBAKE_WITH_MIXED_CP1252_AND_CONTROL_BYTES));
     }

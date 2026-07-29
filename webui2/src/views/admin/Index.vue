@@ -60,6 +60,10 @@ menus.value = [
     ]
   },
   {
+    path: '/guild',
+    meta: { title: '公会管理', icon: 'role' }
+  },
+  {
     path: '/monitor',
     meta: { title: '服务器监控', icon: 'dashboard' }
   },

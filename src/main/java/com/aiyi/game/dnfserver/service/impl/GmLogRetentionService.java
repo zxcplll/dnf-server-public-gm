@@ -25,13 +25,20 @@ public class GmLogRetentionService {
         deleted += cleanupTable("gm_online_reward_log", "awarded_at", null);
         deleted += cleanupTable("gm_cdk_redemption", "redeemed_at", null);
         deleted += cleanupTable("gm_backup_entry", "created_at", "status='FAILED'");
+        deleted += cleanupTable("d_guild", "guild_grade_log", "occ_time", null);
         if (deleted > 0) {
             LOGGER.info("Deleted {} GM log rows older than {} days", deleted, RETENTION_DAYS);
         }
     }
 
     private int cleanupTable(String table, String timeColumn, String predicate) {
-        StringBuilder sql = new StringBuilder("DELETE FROM dnf_service.")
+        return cleanupTable("dnf_service", table, timeColumn, predicate);
+    }
+
+    private int cleanupTable(String schema, String table, String timeColumn, String predicate) {
+        StringBuilder sql = new StringBuilder("DELETE FROM ")
+                .append(schema)
+                .append(".")
                 .append(table)
                 .append(" WHERE ");
         if (predicate != null) {

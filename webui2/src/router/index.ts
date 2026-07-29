@@ -129,6 +129,14 @@ const routes: Array<RouteRecordRaw> = [
                 }
             },
             {
+                path: 'guild',
+                name: 'GuildManager',
+                component: () => import('../views/admin/guild/GuildManager.vue'),
+                meta: {
+                    title: '公会管理'
+                }
+            },
+            {
                 path: 'player',
                 meta: {
                     title: '玩家管理'

@@ -205,42 +205,20 @@ public class ChinaseUtil {
 
     public static String convertCharsetUTF8(String s)
     {
-        if (s != null)
-        {
-//            byte[] buffer = s.getBytes(StandardCharsets.UTF_8);
-            //0x81 to Unicode 0x0081, 0x8d to 0x008d, 0x8f to 0x008f, 0x90 to 0x0090, and 0x9d to 0x009d.
-            byte[] buffer = s.getBytes(StandardCharsets.UTF_8);
-            String s1 = new String(buffer, Charset.forName("CP1252"));
-            int length = s1.length();
-            for (int i = 0; i < length; ++i)
-            {
-                char c = s1.charAt(i);
-                if (c == 0x81)
-                {
-                    buffer[i] = (byte) 0x0081;
-                }
-                else if (c == 0x8d)
-                {
-                    buffer[i] = (byte) 0x008d;
-                }
-                else if (c == 0x8f)
-                {
-                    buffer[i] = (byte) 0x008f;
-                }
-                else if (c == 0x90)
-                {
-                    buffer[i] = (byte) 0x0090;
-                }
-                else if (c == 0x9d)
-                {
-                    buffer[i] = (byte) 0x009d;
-                }
-                else
-                {
-                    buffer[i] = Character.toString(c).getBytes(Charset.forName("CP1252"))[0];
+        if (s != null) {
+            Charset cp1252 = Charset.forName("CP1252");
+            byte[] utf8 = s.getBytes(StandardCharsets.UTF_8);
+            StringBuilder encoded = new StringBuilder(utf8.length);
+            for (byte value : utf8) {
+                int unsigned = value & 0xFF;
+                if (unsigned == 0x81 || unsigned == 0x8D || unsigned == 0x8F ||
+                        unsigned == 0x90 || unsigned == 0x9D) {
+                    encoded.append((char) unsigned);
+                } else {
+                    encoded.append(new String(new byte[]{value}, cp1252));
                 }
             }
-            return new String(buffer, Charset.forName("CP1252"));
+            return encoded.toString();
         }
         return null;
     }
