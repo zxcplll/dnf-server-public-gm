@@ -533,4 +533,20 @@ public class GmFeatureServiceTest {
         service.sendMail(stackableMail);
         assertEquals(0, stackableMail.getEndurance());
     }
+
+    @Test
+    public void backupUsesConfiguredRemoteDatabaseEndpoint() {
+        GmFeatureService service = new GmFeatureService();
+        ReflectionTestUtils.setField(service, "datasourceUrl",
+                "jdbc:mysql://db.example.test:3300/game?useUnicode=true&characterEncoding=utf8");
+        ReflectionTestUtils.setField(service, "datasourceUsername", "backup-user");
+        ReflectionTestUtils.setField(service, "datasourcePassword", "backup-password");
+
+        Object connection = ReflectionTestUtils.invokeMethod(service, "resolveBackupDatabaseConnection");
+
+        assertEquals("db.example.test", ReflectionTestUtils.getField(connection, "host"));
+        assertEquals(3300, ReflectionTestUtils.getField(connection, "port"));
+        assertEquals("backup-user", ReflectionTestUtils.getField(connection, "username"));
+        assertEquals("backup-password", ReflectionTestUtils.getField(connection, "password"));
+    }
 }

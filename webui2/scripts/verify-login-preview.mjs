@@ -10,6 +10,13 @@ assert.match(source, /@submit="login"/);
 assert.match(source, /:loading="submitting"/);
 assert.match(source, /autocomplete="username"/);
 assert.match(source, /autocomplete="current-password"/);
+assert.match(
+  source,
+  /\.login-form :deep\(\.arco-input\)[\s\S]{0,260}background(?:-color)?: transparent !important/,
+);
+assert.match(source, /\.login-form :deep\(\.arco-input:-webkit-autofill\)/);
+assert.match(source, /-webkit-text-fill-color: #efffff/);
+assert.match(source, /box-shadow: 0 0 0 1000px rgba\(4, 10, 17, 0\.98\) inset !important/);
 assert.match(source, /100dvh/);
 assert.match(source, /@media \(max-width: 860px\)/);
 assert.match(source, /theme-quantum/);

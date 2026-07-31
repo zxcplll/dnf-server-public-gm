@@ -1357,6 +1357,23 @@ onBeforeUnmount(() => {
   color: #efffff;
 }
 
+.login-form :deep(.arco-input) {
+  color: #efffff;
+  background: transparent !important;
+  background-color: transparent !important;
+  caret-color: #5ce9df;
+}
+
+.login-form :deep(.arco-input:-webkit-autofill),
+.login-form :deep(.arco-input:-webkit-autofill:hover),
+.login-form :deep(.arco-input:-webkit-autofill:focus) {
+  color: #efffff !important;
+  -webkit-text-fill-color: #efffff !important;
+  caret-color: #efffff;
+  box-shadow: 0 0 0 1000px rgba(4, 10, 17, 0.98) inset !important;
+  transition: background-color 9999s ease-out;
+}
+
 .login-form :deep(.arco-input::placeholder) {
   color: #627982;
 }

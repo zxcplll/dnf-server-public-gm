@@ -9,10 +9,11 @@ const read = async (relativePath) => {
   }
 };
 
-const [router, adminIndex, theme, api, inspector, online, analytics, monitor, guild, playerMail] = await Promise.all([
+const [router, adminIndex, theme, globalTheme, api, inspector, online, analytics, monitor, guild, playerMail] = await Promise.all([
   read('src/router/index.ts'),
   read('src/views/admin/Index.vue'),
   read('src/styles/admin-theme.css'),
+  read('src/style.css'),
   read('src/api/gmOperations.ts'),
   read('src/components/admin/player/PlayerInspector.vue'),
   read('src/views/admin/player/RealtimePlayers.vue'),
@@ -26,6 +27,10 @@ assert.match(router, /path:\s*'online'/, '实时在线路由缺失');
 assert.match(router, /path:\s*'analytics'/, '运营统计路由缺失');
 assert.match(adminIndex, /实时在线/);
 assert.match(adminIndex, /运营统计/);
+assert.match(adminIndex, /Request\.get\('\/api\/v1\/account\?page=1&pageSize=1'\)/);
+assert.match(adminIndex, /document\.body\.classList\.add\('admin-theme'\)/);
+assert.match(adminIndex, /document\.body\.classList\.remove\('admin-theme'\)/);
+assert.doesNotMatch(adminIndex, /style="color:\s*white/);
 assert.match(api, /runtime\/online/);
 assert.match(api, /runtime\/health/);
 assert.match(api, /players\/\$\{characNo\}/);
@@ -66,5 +71,17 @@ assert.match(theme, /gm-z-modal/);
 assert.match(theme, /gm-z-inspector/);
 assert.match(theme, /gm-z-hover/);
 assert.match(theme, /max-width:\s*860px/);
+assert.match(theme, /\.admin-page \.arco-picker/);
+assert.match(theme, /\.admin-page \.arco-input-tag/);
+assert.match(theme, /\.admin-page \.arco-input-number-input[\s\S]*?background-color:\s*transparent/);
+assert.match(theme, /-webkit-box-shadow:\s*0 0 0 1000px var\(--gm-surface-raised\) inset/);
+assert.match(theme, /--color-bg-popup:\s*#101a2a/);
+assert.match(theme, /--color-bg-5:\s*#152238/);
+assert.match(globalTheme, /\.arco-select-dropdown \.arco-select-option/);
+assert.match(globalTheme, /\.arco-picker-popup \.arco-calendar-panel/);
+assert.match(globalTheme, /\.arco-drawer-container \.arco-table-th/);
+assert.match(globalTheme, /\.arco-drawer-container \.arco-tag-checked\.arco-tag-green/);
+assert.match(globalTheme, /body\.admin-theme[\s\S]*?background:\s*var\(--gm-bg\)/);
+assert.match(globalTheme, /body\.admin-theme input[\s\S]*?color:\s*inherit/);
 
 console.log('operations control UI structure verified');

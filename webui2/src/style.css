@@ -25,6 +25,50 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* The legacy public template is loaded on demand and contains global light
+   defaults. Keep those rules from leaking into the admin shell after a route
+   switch. */
+body.admin-theme {
+  margin: 0;
+  min-width: 320px;
+  color: var(--gm-text);
+  background: var(--gm-bg);
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body.admin-theme input,
+body.admin-theme textarea,
+body.admin-theme select,
+body.admin-theme button {
+  font: inherit;
+  color: inherit;
+}
+
+body.admin-theme input,
+body.admin-theme textarea,
+body.admin-theme select {
+  background: transparent;
+}
+
+body.admin-theme table {
+  color: var(--gm-text);
+}
+
+body.admin-theme .arco-spin-mask {
+  background: rgba(8, 13, 22, 0.72);
+}
+
+body.admin-theme .arco-skeleton-shape,
+body.admin-theme .arco-skeleton-line-row {
+  background-color: var(--gm-surface-raised);
+}
+
+body.admin-theme .arco-skeleton-animation .arco-skeleton-shape,
+body.admin-theme .arco-skeleton-animation .arco-skeleton-line-row {
+  background: linear-gradient(90deg, var(--gm-surface-raised) 25%, var(--gm-surface-hover) 37%, var(--gm-surface-raised) 63%);
+  background-size: 400% 100%;
+}
+
 .arco-trigger-popup,
 .arco-dropdown,
 .arco-select-dropdown,
@@ -36,6 +80,9 @@
   --color-bg-2: #101a2a;
   --color-bg-3: #152238;
   --color-bg-4: #1b2b43;
+  --color-bg-5: #152238;
+  --color-bg-popup: #101a2a;
+  --color-bg-white: #152238;
   --color-fill-1: rgba(151, 174, 204, 0.06);
   --color-fill-2: rgba(151, 174, 204, 0.1);
   --color-fill-3: rgba(151, 174, 204, 0.15);
@@ -111,8 +158,194 @@
   color: var(--gm-text);
 }
 
+/* Dialogs and drawers are teleported outside .admin-page. Keep their form
+   controls on the same dark surface instead of falling back to Arco's light
+   defaults. */
+.arco-modal-wrapper .arco-input-wrapper,
+.arco-modal-wrapper .arco-select-view,
+.arco-modal-wrapper .arco-input-number,
+.arco-modal-wrapper .arco-textarea-wrapper,
+.arco-modal-wrapper .arco-picker,
+.arco-modal-wrapper .arco-input-tag,
+.arco-drawer-container .arco-input-wrapper,
+.arco-drawer-container .arco-select-view,
+.arco-drawer-container .arco-input-number,
+.arco-drawer-container .arco-textarea-wrapper,
+.arco-drawer-container .arco-picker,
+.arco-drawer-container .arco-input-tag {
+  border-color: var(--gm-rule-strong);
+  background: var(--gm-surface-raised);
+  color: var(--gm-text);
+}
+
+.arco-modal-wrapper .arco-input,
+.arco-modal-wrapper .arco-textarea,
+.arco-modal-wrapper .arco-input-number-input,
+.arco-modal-wrapper .arco-picker input,
+.arco-modal-wrapper .arco-input-tag-input,
+.arco-drawer-container .arco-input,
+.arco-drawer-container .arco-textarea,
+.arco-drawer-container .arco-input-number-input,
+.arco-drawer-container .arco-picker input,
+.arco-drawer-container .arco-input-tag-input {
+  color: var(--gm-text);
+  background: transparent;
+}
+
+.arco-modal-wrapper .arco-input::placeholder,
+.arco-modal-wrapper .arco-textarea::placeholder,
+.arco-modal-wrapper .arco-input-number-input::placeholder,
+.arco-modal-wrapper .arco-picker input::placeholder,
+.arco-modal-wrapper .arco-input-tag-input::placeholder,
+.arco-drawer-container .arco-input::placeholder,
+.arco-drawer-container .arco-textarea::placeholder,
+.arco-drawer-container .arco-input-number-input::placeholder,
+.arco-drawer-container .arco-picker input::placeholder,
+.arco-drawer-container .arco-input-tag-input::placeholder {
+  color: var(--gm-subtle);
+}
+
+.arco-modal-wrapper .arco-table,
+.arco-drawer-container .arco-table {
+  color: var(--gm-text);
+  background: var(--gm-surface);
+}
+
+.arco-modal-wrapper .arco-table-th,
+.arco-drawer-container .arco-table-th {
+  color: var(--gm-muted);
+  background: var(--gm-surface-raised);
+  border-bottom-color: var(--gm-rule-strong);
+}
+
+.arco-modal-wrapper .arco-table-td,
+.arco-drawer-container .arco-table-td {
+  color: var(--gm-text);
+  background: var(--gm-surface);
+  border-bottom-color: var(--gm-rule);
+}
+
+.arco-modal-wrapper .arco-table-cell,
+.arco-drawer-container .arco-table-cell {
+  color: var(--gm-text);
+}
+
+.arco-modal-wrapper .arco-table-th .arco-table-cell,
+.arco-drawer-container .arco-table-th .arco-table-cell {
+  color: var(--gm-muted);
+}
+
+.arco-modal-wrapper .arco-table-tr:hover .arco-table-td,
+.arco-drawer-container .arco-table-tr:hover .arco-table-td {
+  background: var(--gm-surface-hover);
+}
+
+.arco-modal-wrapper .arco-btn:not(.arco-btn-primary),
+.arco-drawer-container .arco-btn:not(.arco-btn-primary) {
+  color: var(--gm-text);
+  background: var(--gm-surface-raised);
+  border-color: var(--gm-rule-strong);
+}
+
+.arco-modal-wrapper .arco-btn:not(.arco-btn-primary):hover,
+.arco-drawer-container .arco-btn:not(.arco-btn-primary):hover {
+  color: var(--gm-cyan);
+  background: var(--gm-cyan-soft);
+  border-color: rgba(77, 228, 210, .65);
+}
+
+.arco-modal-wrapper .arco-btn-disabled,
+.arco-drawer-container .arco-btn-disabled {
+  color: var(--gm-subtle) !important;
+  background: var(--gm-surface-raised) !important;
+  border-color: var(--gm-rule) !important;
+}
+
+.arco-modal-wrapper .arco-btn-status-danger,
+.arco-drawer-container .arco-btn-status-danger {
+  color: #ff9aa5;
+  background: rgba(255, 97, 113, .14);
+  border-color: rgba(255, 97, 113, .34);
+}
+
+.admin-page .arco-tag-checked.arco-tag-green,
+.arco-modal-wrapper .arco-tag-checked.arco-tag-green,
+.arco-drawer-container .arco-tag-checked.arco-tag-green {
+  color: #69e7a5;
+  background: rgba(50, 205, 128, .14);
+  border-color: rgba(50, 205, 128, .32);
+}
+
+.admin-page .arco-tag-checked.arco-tag-red,
+.arco-modal-wrapper .arco-tag-checked.arco-tag-red,
+.arco-drawer-container .arco-tag-checked.arco-tag-red {
+  color: #ff9aa5;
+  background: rgba(255, 97, 113, .14);
+  border-color: rgba(255, 97, 113, .32);
+}
+
+.admin-page .arco-tag-checked.arco-tag-arcoblue,
+.admin-page .arco-tag-checked.arco-tag-blue,
+.arco-modal-wrapper .arco-tag-checked.arco-tag-arcoblue,
+.arco-modal-wrapper .arco-tag-checked.arco-tag-blue,
+.arco-drawer-container .arco-tag-checked.arco-tag-arcoblue,
+.arco-drawer-container .arco-tag-checked.arco-tag-blue {
+  color: #8db5ff;
+  background: rgba(109, 157, 255, .14);
+  border-color: rgba(109, 157, 255, .34);
+}
+
+.admin-page .arco-tag-checked.arco-tag-gray,
+.arco-modal-wrapper .arco-tag-checked.arco-tag-gray,
+.arco-drawer-container .arco-tag-checked.arco-tag-gray {
+  color: var(--gm-muted);
+  background: var(--gm-surface-raised);
+  border-color: var(--gm-rule);
+}
+
 .arco-select-option-hover,
 .arco-dropdown-option:hover {
+  background: var(--gm-surface-hover);
+}
+
+.arco-select-dropdown .arco-select-option,
+.arco-select-dropdown .arco-select-option-selected,
+.arco-select-dropdown .arco-select-option-disabled {
+  background: var(--gm-surface);
+  color: var(--gm-text);
+}
+
+.arco-select-dropdown .arco-select-option-hover,
+.arco-select-dropdown .arco-select-option-selected.arco-select-option-hover {
+  background: var(--gm-surface-hover);
+  color: var(--gm-text);
+}
+
+.arco-picker-popup .arco-calendar,
+.arco-picker-popup .arco-calendar-panel {
+  background: var(--gm-surface);
+  border-color: var(--gm-rule-strong);
+  color: var(--gm-text);
+}
+
+.arco-picker-popup .arco-calendar-header,
+.arco-picker-popup .arco-calendar-week-list,
+.arco-picker-popup .arco-calendar-cell {
+  border-color: var(--gm-rule);
+}
+
+.arco-picker-popup .arco-calendar-header-value,
+.arco-picker-popup .arco-calendar-date-value,
+.arco-picker-popup .arco-calendar-month-title {
+  color: var(--gm-text);
+}
+
+.arco-picker-popup .arco-calendar-week-list-item {
+  color: var(--gm-muted);
+}
+
+.arco-picker-popup .arco-calendar-date:hover,
+.arco-picker-popup .arco-calendar-header-icon:hover {
   background: var(--gm-surface-hover);
 }
 

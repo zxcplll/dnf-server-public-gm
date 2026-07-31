@@ -154,6 +154,7 @@ const normalizeAdminPath = (path: string) => {
 };
 
 onMounted(() => {
+  document.body.classList.add('admin-theme');
   syncViewport();
   viewportQuery = window.matchMedia('(max-width: 860px)');
   viewportQuery.addEventListener?.('change', syncViewport);
@@ -170,6 +171,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   viewportQuery?.removeEventListener?.('change', syncViewport);
+  document.body.classList.remove('admin-theme');
 });
 
 
@@ -262,7 +264,7 @@ const logout = () => {
 }
 
 // TODO 临时先随便请求个接口，触发后端验证token逻辑，获取用户信息
-Request.get('api/v1/account?page=1&pageSize=1')
+Request.get('/api/v1/account?page=1&pageSize=1')
 </script>
 
 <template>
@@ -335,7 +337,7 @@ Request.get('api/v1/account?page=1&pageSize=1')
                   <icon-user />
                 </a-avatar>
               </div>
-              <div class="user-info-right" style="color: white; margin-left: 8px;">
+              <div class="user-info-right">
                 <div>{{userInfo ? (userInfo.nickName ? userInfo.nickName : userInfo.userName) : 'GM管理员'}}</div>
                 <div style="font-size: 12px;" v-if="userInfo">{{userInfo.email ? userInfo.email : (userInfo.phonenumber ? userInfo.phonenumber : '')}}</div>
               </div>

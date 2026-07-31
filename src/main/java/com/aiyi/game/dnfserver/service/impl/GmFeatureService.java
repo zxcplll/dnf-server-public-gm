@@ -12,6 +12,7 @@ import com.aiyi.game.dnfserver.pvf.PvfCache;
 import com.aiyi.game.dnfserver.pvf.PvfManager;
 import com.aiyi.game.dnfserver.service.PostalService;
 import com.aiyi.game.dnfserver.utils.ChinaseUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,6 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.nio.file.*;
@@ -41,6 +45,12 @@ public class GmFeatureService {
 
     @Resource
     private JdbcTemplate jdbcTemplate;
+    @Value("${spring.datasource.url:}")
+    private String datasourceUrl;
+    @Value("${spring.datasource.username:}")
+    private String datasourceUsername;
+    @Value("${spring.datasource.password:}")
+    private String datasourcePassword;
     @Resource
     private PostalService postalService;
     @Resource
@@ -778,17 +788,26 @@ public class GmFeatureService {
     }
 
     private void runDump(File target) throws IOException, InterruptedException {
-        String password = System.getenv("SPRING_DATASOURCE_PASSWORD");
-        if (password == null) password = System.getenv("MYSQL_PASSWORD");
+        BackupDatabaseConnection database = resolveBackupDatabaseConnection();
         List<String> command = new ArrayList<>();
-        command.add("mysqldump"); command.add("--host=127.0.0.1"); command.add("--single-transaction"); command.add("--routines"); command.add("--triggers"); command.add("-u" + stringValue(System.getenv("SPRING_DATASOURCE_USERNAME"), "game"));
-        for (String schema : BACKUP_SCHEMAS) { command.add("--databases"); command.add(schema); }
+        command.add("mysqldump"); command.add("--host=" + database.host); command.add("--port=" + database.port);
+        command.add("--single-transaction"); command.add("--routines"); command.add("--triggers");
+        command.add("-u" + database.username); command.add("--databases");
+        command.addAll(Arrays.asList(BACKUP_SCHEMAS));
+        File errorFile = File.createTempFile("dnf-gm-mysqldump-", ".err", target.getParentFile());
         ProcessBuilder builder = new ProcessBuilder(command);
-        if (password != null) builder.environment().put("MYSQL_PWD", password);
+        if (!isBlank(database.password)) builder.environment().put("MYSQL_PWD", database.password);
         builder.redirectOutput(target);
-        builder.redirectErrorStream(true);
-        Process process = builder.start();
-        if (process.waitFor() != 0) throw new IOException("mysqldump 退出码 " + process.exitValue());
+        builder.redirectError(errorFile);
+        try {
+            Process process = builder.start();
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IOException("mysqldump exit code " + exitCode + detailFrom(errorFile));
+            }
+        } finally {
+            Files.deleteIfExists(errorFile.toPath());
+        }
     }
 
     public void restoreBackup(long id) throws IOException, InterruptedException {
@@ -806,13 +825,121 @@ public class GmFeatureService {
     }
 
     private void runRestore(File target) throws IOException, InterruptedException {
-        String password = System.getenv("SPRING_DATASOURCE_PASSWORD");
-        if (password == null) password = System.getenv("MYSQL_PASSWORD");
-        ProcessBuilder builder = new ProcessBuilder("mysql", "--host=127.0.0.1", "-u" + stringValue(System.getenv("SPRING_DATASOURCE_USERNAME"), "game"));
-        if (password != null) builder.environment().put("MYSQL_PWD", password);
-        builder.redirectInput(target); builder.redirectErrorStream(true);
-        Process process = builder.start();
-        if (process.waitFor() != 0) throw new IOException("mysql 恢复退出码 " + process.exitValue());
+        BackupDatabaseConnection database = resolveBackupDatabaseConnection();
+        File errorFile = File.createTempFile("dnf-gm-mysql-restore-", ".err", target.getParentFile());
+        ProcessBuilder builder = new ProcessBuilder("mysql", "--host=" + database.host, "--port=" + database.port, "-u" + database.username);
+        if (!isBlank(database.password)) builder.environment().put("MYSQL_PWD", database.password);
+        builder.redirectInput(target); builder.redirectError(errorFile);
+        try {
+            Process process = builder.start();
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IOException("mysql restore exit code " + exitCode + detailFrom(errorFile));
+            }
+        } finally {
+            Files.deleteIfExists(errorFile.toPath());
+        }
+    }
+
+    /** Resolve the same endpoint Spring uses instead of assuming localhost:3306. */
+    private BackupDatabaseConnection resolveBackupDatabaseConnection() {
+        String url = firstNonBlank(System.getenv("SPRING_DATASOURCE_URL"),
+                System.getProperty("spring.datasource.url"), datasourceUrl);
+        String username = firstNonBlank(System.getenv("SPRING_DATASOURCE_USERNAME"),
+                System.getenv("MYSQL_USER"), System.getProperty("spring.datasource.username"), datasourceUsername, "game");
+        String password = firstNonBlank(System.getenv("SPRING_DATASOURCE_PASSWORD"),
+                System.getenv("MYSQL_PASSWORD"), System.getProperty("spring.datasource.password"), datasourcePassword);
+
+        if (isBlank(url) && jdbcTemplate != null && jdbcTemplate.getDataSource() != null) {
+            try (Connection connection = jdbcTemplate.getDataSource().getConnection()) {
+                DatabaseMetaData metadata = connection.getMetaData();
+                url = firstNonBlank(metadata.getURL(), url);
+                username = firstNonBlank(metadata.getUserName(), username);
+            } catch (Exception e) {
+                LOGGER.warn("Unable to read database endpoint from the active datasource: {}", e.getMessage());
+            }
+        }
+        return BackupDatabaseConnection.fromJdbcUrl(url, username, password);
+    }
+
+    private String detailFrom(File errorFile) {
+        if (errorFile == null || !errorFile.exists()) return "";
+        try {
+            String detail = new String(Files.readAllBytes(errorFile.toPath()), StandardCharsets.UTF_8).trim();
+            if (detail.length() > 400) detail = detail.substring(0, 400);
+            return detail.isEmpty() ? "" : ": " + detail;
+        } catch (IOException ignored) {
+            return "";
+        }
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) return "";
+        for (String value : values) if (!isBlank(value)) return value.trim();
+        return "";
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private static final class BackupDatabaseConnection {
+        private final String host;
+        private final int port;
+        private final String username;
+        private final String password;
+
+        private BackupDatabaseConnection(String host, int port, String username, String password) {
+            this.host = host;
+            this.port = port;
+            this.username = username;
+            this.password = password;
+        }
+
+        private static BackupDatabaseConnection fromJdbcUrl(String jdbcUrl, String username, String password) {
+            String host = "127.0.0.1";
+            int port = 3306;
+            if (!isBlank(jdbcUrl)) {
+                String value = jdbcUrl.trim();
+                int authorityStart = value.indexOf("://");
+                authorityStart = authorityStart < 0 ? 0 : authorityStart + 3;
+                int authorityEnd = value.length();
+                int slash = value.indexOf('/', authorityStart);
+                int query = value.indexOf('?', authorityStart);
+                if (slash >= 0) authorityEnd = Math.min(authorityEnd, slash);
+                if (query >= 0) authorityEnd = Math.min(authorityEnd, query);
+                String authority = value.substring(Math.min(authorityStart, value.length()), authorityEnd);
+                int userInfo = authority.lastIndexOf('@');
+                if (userInfo >= 0) authority = authority.substring(userInfo + 1);
+                if (authority.startsWith("[")) {
+                    int closing = authority.indexOf(']');
+                    if (closing > 0) {
+                        host = authority.substring(1, closing);
+                        if (closing + 1 < authority.length() && authority.charAt(closing + 1) == ':') {
+                            port = parsePort(authority.substring(closing + 2), port);
+                        }
+                    }
+                } else {
+                    int colon = authority.lastIndexOf(':');
+                    if (colon > 0 && authority.indexOf(':') == colon) {
+                        host = authority.substring(0, colon);
+                        port = parsePort(authority.substring(colon + 1), port);
+                    } else if (!authority.isEmpty()) {
+                        host = authority;
+                    }
+                }
+            }
+            return new BackupDatabaseConnection(host, port, firstNonBlank(username, "game"), password == null ? "" : password);
+        }
+
+        private static int parsePort(String value, int fallback) {
+            try {
+                int parsed = Integer.parseInt(value);
+                return parsed > 0 && parsed <= 65535 ? parsed : fallback;
+            } catch (Exception ignored) {
+                return fallback;
+            }
+        }
     }
 
     private void pruneBackups(String type, int retain) {

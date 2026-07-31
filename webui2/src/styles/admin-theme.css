@@ -3,6 +3,9 @@
   --color-bg-2: #101a2a;
   --color-bg-3: #152238;
   --color-bg-4: #1b2b43;
+  --color-bg-5: #152238;
+  --color-bg-popup: #101a2a;
+  --color-bg-white: #152238;
   --color-fill-1: rgba(151, 174, 204, 0.06);
   --color-fill-2: rgba(151, 174, 204, 0.1);
   --color-fill-3: rgba(151, 174, 204, 0.15);
@@ -130,7 +133,9 @@
 .admin-page .arco-input-wrapper,
 .admin-page .arco-select-view,
 .admin-page .arco-input-number,
-.admin-page .arco-textarea-wrapper {
+.admin-page .arco-textarea-wrapper,
+.admin-page .arco-picker,
+.admin-page .arco-input-tag {
   border-color: var(--gm-rule-strong);
   background: var(--gm-surface-raised);
   color: var(--gm-text);
@@ -139,14 +144,18 @@
 .admin-page .arco-input-wrapper:hover,
 .admin-page .arco-select-view:hover,
 .admin-page .arco-input-number:hover,
-.admin-page .arco-textarea-wrapper:hover {
+.admin-page .arco-textarea-wrapper:hover,
+.admin-page .arco-picker:hover,
+.admin-page .arco-input-tag:hover {
   border-color: rgba(77, 228, 210, 0.65);
 }
 
 .admin-page .arco-input-wrapper.arco-input-focus,
 .admin-page .arco-select-view.arco-select-view-focus,
 .admin-page .arco-input-number.arco-input-number-focus,
-.admin-page .arco-textarea-wrapper.arco-textarea-focus {
+.admin-page .arco-textarea-wrapper.arco-textarea-focus,
+.admin-page .arco-picker-focused,
+.admin-page .arco-input-tag.arco-input-tag-focus {
   border-color: var(--gm-cyan);
   box-shadow: 0 0 0 2px var(--gm-cyan-soft);
 }
@@ -154,15 +163,38 @@
 .admin-page .arco-input,
 .admin-page .arco-textarea,
 .admin-page .arco-input-number-input,
+.admin-page .arco-picker input,
+.admin-page .arco-input-tag .arco-input-tag-input,
 .admin-page .arco-select-view-value,
 .admin-page .arco-select-view-suffix {
   color: var(--gm-text);
+  background-color: transparent;
 }
 
 .admin-page .arco-input::placeholder,
 .admin-page .arco-textarea::placeholder,
-.admin-page .arco-input-number-input::placeholder {
+.admin-page .arco-input-number-input::placeholder,
+.admin-page .arco-picker input::placeholder,
+.admin-page .arco-input-tag .arco-input-tag-input::placeholder {
   color: var(--gm-subtle);
+}
+
+.admin-page .arco-picker-suffix-icon,
+.admin-page .arco-picker-prefix,
+.admin-page .arco-input-tag-prefix,
+.admin-page .arco-input-tag-suffix,
+.admin-page .arco-input-tag-clear-btn {
+  color: var(--gm-muted);
+}
+
+.admin-page .arco-input:-webkit-autofill,
+.admin-page .arco-input-number-input:-webkit-autofill,
+.admin-page .arco-picker input:-webkit-autofill,
+.admin-page .arco-input-tag-input:-webkit-autofill {
+  -webkit-text-fill-color: var(--gm-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--gm-surface-raised) inset;
+  box-shadow: 0 0 0 1000px var(--gm-surface-raised) inset;
+  caret-color: var(--gm-text);
 }
 
 .admin-page .arco-btn {
