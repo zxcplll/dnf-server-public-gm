@@ -375,7 +375,8 @@ function gmRuntimeBridgeV2EnumerateOnlinePlayers() {
         throw new Error('online enumeration is unavailable');
     }
     var players = [];
-    var activeCount = 0;
+    var seenPlayers = Object.create(null);
+    var duplicateCount = 0;
     var errors = 0;
     var scanned = 0;
     var traversalTruncated = false;
@@ -390,27 +391,40 @@ function gmRuntimeBridgeV2EnumerateOnlinePlayers() {
         try {
             var user = api_gameworld_user_map_get(iterator);
             if (!gmRuntimeBridgeV2IsNull(user) && CUser_get_state(user) >= 3) {
-                activeCount += 1;
-                players.push(gmRuntimeBridgeV2BuildPlayer(user));
+                var player = gmRuntimeBridgeV2BuildPlayer(user);
+                gmRuntimeBridgeV2ValidatePositiveInt(player.accountId, 'accountId');
+                gmRuntimeBridgeV2ValidatePositiveInt(player.characNo, 'characNo');
+                if (player.state >= 3) {
+                    var identity = player.accountId + ':' + player.characNo;
+                    if (seenPlayers[identity]) {
+                        duplicateCount += 1;
+                    } else {
+                        seenPlayers[identity] = true;
+                        players.push(player);
+                    }
+                }
             }
         } catch (ignored) {
             errors += 1;
         }
-        iterator = api_gameworld_user_map_next(iterator);
+        // The host wrapper calls postfix ++: it mutates the iterator and returns the old copy.
+        api_gameworld_user_map_next(iterator);
     }
-    var total = activeCount;
+    var reportedTotal = null;
     try {
         if (typeof GameWorld_get_UserCount_InWorld === 'function') {
             var reported = GameWorld_get_UserCount_InWorld(G_GameWorld());
-            if (typeof reported === 'number' && isFinite(reported) && reported >= total) {
-                total = Math.floor(reported);
+            if (typeof reported === 'number' && isFinite(reported) && reported >= 0) {
+                reportedTotal = Math.floor(reported);
             }
         }
     } catch (ignored) {
     }
     return {
         players: players,
-        total: total,
+        total: players.length,
+        reportedTotal: reportedTotal,
+        duplicateCount: duplicateCount,
         errors: errors,
         traversalTruncated: traversalTruncated
     };
@@ -440,6 +454,8 @@ function gmRuntimeBridgeV2OnlineSnapshot(request) {
             offset: offset,
             limit: limit,
             total: snapshot.total,
+            reportedTotal: snapshot.reportedTotal,
+            duplicateCount: snapshot.duplicateCount,
             truncated: snapshot.traversalTruncated || snapshot.total > players.length ||
                 offset + page.length < players.length,
             errors: snapshot.errors,

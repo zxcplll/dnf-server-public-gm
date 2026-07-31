@@ -61,7 +61,9 @@ global.GameWorld_find_user_from_world_byaccid = (_world, accountId) => {
     return accountId === 42 ? onlineUser : { isNull: () => true };
 };
 let mapNextCalls = 0;
-const onlineIteratorUsers = [onlineUser, pendingUser];
+let onlineIteratorUsers = [onlineUser, pendingUser];
+let reportedOnlineCount = 1;
+let nonProgressIterator = false;
 global.api_gameworld_user_map_begin = () => {
     assert.strictEqual(insideMainThread, true);
     return { index: 0 };
@@ -81,11 +83,13 @@ global.api_gameworld_user_map_get = iterator => {
 global.api_gameworld_user_map_next = iterator => {
     assert.strictEqual(insideMainThread, true);
     mapNextCalls += 1;
-    return { index: iterator.index + 1 };
+    const previous = { index: iterator.index };
+    if (!nonProgressIterator) iterator.index += 1;
+    return previous;
 };
 global.GameWorld_get_UserCount_InWorld = () => {
     assert.strictEqual(insideMainThread, true);
-    return 1;
+    return reportedOnlineCount;
 };
 global.CUser_get_state = user => nativeValue(user, 'state');
 global.CUser_get_acc_id = user => nativeValue(user, 'accountId');
@@ -305,6 +309,50 @@ vm.runInThisContext(bridge, { filename: 'gm-runtime-bridge-v2.js' });
     await assert.rejects(() => gmRuntimeBridgeV2ReadRequest({
         read: async size => new Uint8Array(size).fill(65).buffer
     }), /too large/);
+
+    // A stale host count must not manufacture online players when the map is empty.
+    onlineIteratorUsers = [];
+    reportedOnlineCount = 512;
+    mapNextCalls = 0;
+    const staleEmpty = await gmRuntimeBridgeV2Dispatch({
+        op: 'online_snapshot', offset: 0, limit: 50
+    });
+    assert.strictEqual(staleEmpty.ok, true);
+    assert.strictEqual(staleEmpty.total, 0);
+    assert.strictEqual(staleEmpty.players.length, 0);
+    assert.strictEqual(staleEmpty.truncated, false);
+    assert.strictEqual(mapNextCalls, 0);
+
+    // Repeated map entries for one role must be returned once, even with a stale count.
+    onlineIteratorUsers = [onlineUser, onlineUser, pendingUser, onlineUser];
+    reportedOnlineCount = 512;
+    mapNextCalls = 0;
+    const duplicateRoles = await gmRuntimeBridgeV2Dispatch({
+        op: 'online_snapshot', offset: 0, limit: 50
+    });
+    assert.strictEqual(duplicateRoles.ok, true);
+    assert.strictEqual(duplicateRoles.total, 1);
+    assert.strictEqual(duplicateRoles.players.length, 1);
+    assert.strictEqual(duplicateRoles.players[0].accountId, 42);
+    assert.strictEqual(duplicateRoles.players[0].characNo, 23);
+    assert.strictEqual(duplicateRoles.duplicateCount, 2);
+    assert.strictEqual(duplicateRoles.truncated, false);
+    assert.strictEqual(mapNextCalls, 4);
+
+    // A broken next() implementation must terminate at the scan cap, not loop forever.
+    onlineIteratorUsers = [onlineUser];
+    reportedOnlineCount = 512;
+    nonProgressIterator = true;
+    mapNextCalls = 0;
+    const stuckIterator = await gmRuntimeBridgeV2Dispatch({
+        op: 'online_snapshot', offset: 0, limit: 50
+    });
+    assert.strictEqual(stuckIterator.ok, true);
+    assert.strictEqual(stuckIterator.total, 1);
+    assert.strictEqual(stuckIterator.players.length, 1);
+    assert.strictEqual(stuckIterator.truncated, true);
+    assert.strictEqual(stuckIterator.duplicateCount, 511);
+    assert.strictEqual(mapNextCalls, 512);
     console.log('gm runtime bridge v2 tests passed');
 })().catch(error => {
     console.error(error);
