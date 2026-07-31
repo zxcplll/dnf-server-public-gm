@@ -25,6 +25,9 @@ interface ThemeMeta {
   key: PreviewTheme;
   index: string;
   name: string;
+}
+
+interface LoginCopy {
   systemCode: string;
   headline: string;
   subtitle: string;
@@ -55,34 +58,27 @@ const themeOptions: ThemeMeta[] = [
   {
     key: 'midnight',
     index: '01',
-    name: '深夜控制台',
-    systemCode: 'CONTROL NODE 01',
-    headline: '运营控制台',
-    subtitle: 'DNF 游戏服务管理入口',
-    panelKicker: 'OPERATOR ACCESS',
-    accessLabel: 'SECURE CONTROL',
+    name: '深色模式',
   },
   {
     key: 'quantum',
     index: '02',
-    name: '量子导航舱',
-    systemCode: 'QUANTUM LINK 02',
-    headline: '量子指挥舱',
-    subtitle: '跨节点运行状态与身份接入',
-    panelKicker: 'NAVIGATION AUTH',
-    accessLabel: 'VECTOR LOCK',
+    name: '蓝色模式',
   },
   {
     key: 'aurora',
     index: '03',
-    name: '极光作业台',
-    systemCode: 'AURORA OPS 03',
-    headline: '极光作业台',
-    subtitle: '实时运维流与权限校验入口',
-    panelKicker: 'SIGNAL ACCESS',
-    accessLabel: 'CHANNEL READY',
+    name: '绿色模式',
   },
 ];
+
+const loginCopy: LoginCopy = {
+  systemCode: 'DNF ADMIN / LIVE',
+  headline: 'DNF-Admin',
+  subtitle: '游戏服务运营管理中心',
+  panelKicker: 'GM 后台登录',
+  accessLabel: '服务连接正常',
+};
 
 const themeByKey = Object.fromEntries(themeOptions.map((option) => [option.key, option])) as Record<PreviewTheme, ThemeMeta>;
 const effectOptions: EffectMeta[] = [
@@ -126,7 +122,7 @@ const scenePalettes: Record<PreviewTheme, ScenePalette> = {
 };
 
 const searchParams = new URLSearchParams(window.location.search);
-const previewEnabled = searchParams.get('preview') === '1';
+const previewEnabled = import.meta.env.DEV && searchParams.get('preview') === '1';
 const requestedTheme = searchParams.get('theme') as PreviewTheme | null;
 const requestedEffect = searchParams.get('effect') as SceneEffect | null;
 const previewTheme = ref<PreviewTheme>(
@@ -139,14 +135,13 @@ const sceneEffect = ref<SceneEffect>(
     ? requestedEffect
     : 'matrix',
 );
-const activeTheme = computed(() => themeByKey[previewTheme.value]);
 const activeEffect = computed(() => effectByKey[sceneEffect.value]);
 
 const tickerRows = [
-  'AUTH.OK  /  UID.SCAN  /  PVF.CACHE  /  GATEWAY.27043  /  FRIDA.ONLINE',
-  '角色在线  /  邮件队列  /  公会同步  /  资源监控  /  SESSION.READY',
-  'DB.SNAPSHOT  /  ITEM.INDEX  /  TASK.RUNNER  /  ACCESS.GRANTED  /  NODE.03',
-  'DNF-ADMIN  /  CONTROL BUS  /  STATUS.LIVE  /  PACKET.LINK  /  OPS.MODE',
+  'DNF-ADMIN  /  游戏服务  /  PVF 管理  /  FRIDA 运行时  /  数据库管理',
+  '在线玩家  /  邮件管理  /  公会管理  /  资源监控  /  在线泡点',
+  '账号管理  /  角色管理  /  物品发放  /  定时任务  /  操作审计',
+  '登录器管理  /  客户端管理  /  数据备份  /  日志保留  /  服务状态',
 ];
 
 const form = reactive({
@@ -656,9 +651,9 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="identity-copy">
-          <span class="system-code">{{ activeTheme.systemCode }}</span>
-          <h1>{{ activeTheme.headline }}</h1>
-          <p>{{ activeTheme.subtitle }}</p>
+          <span class="system-code">{{ loginCopy.systemCode }}</span>
+          <h1>{{ loginCopy.headline }}</h1>
+          <p>{{ loginCopy.subtitle }}</p>
         </div>
 
         <div class="signal-readout" aria-hidden="true">
@@ -672,15 +667,10 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="access-zone">
-        <div class="access-index" aria-hidden="true">
-          <span>AUTH</span>
-          <strong>{{ activeTheme.index }}</strong>
-        </div>
-
         <section class="login-panel" aria-labelledby="login-title">
           <header class="panel-header">
             <div>
-              <span class="panel-kicker">{{ activeTheme.panelKicker }}</span>
+              <span class="panel-kicker">{{ loginCopy.panelKicker }}</span>
               <h2 id="login-title">管理员登录</h2>
             </div>
             <span class="panel-status" :class="{ busy: submitting }" aria-hidden="true">
@@ -751,7 +741,7 @@ onBeforeUnmount(() => {
 
           <footer class="panel-footer">
             <span class="connection-state" role="status" aria-live="polite"><i></i>{{ statusText }}</span>
-            <span class="access-label">{{ activeTheme.accessLabel }}</span>
+            <span class="access-label">{{ loginCopy.accessLabel }}</span>
           </footer>
         </section>
       </div>
@@ -1220,26 +1210,6 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.access-index {
-  position: absolute;
-  top: 26px;
-  right: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  color: rgba(134, 238, 232, 0.5);
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-}
-
-.access-index span {
-  font-size: 10px;
-}
-
-.access-index strong {
-  color: rgba(230, 255, 253, 0.74);
-  font-size: 22px;
-}
-
 .login-panel {
   position: relative;
   box-sizing: border-box;
@@ -1510,8 +1480,7 @@ onBeforeUnmount(() => {
   color: #78aefc;
 }
 
-.theme-quantum .access-label,
-.theme-quantum .access-index {
+.theme-quantum .access-label {
   color: #ffb454;
 }
 
@@ -1627,8 +1596,7 @@ onBeforeUnmount(() => {
 }
 
 .theme-aurora .system-code,
-.theme-aurora .panel-kicker,
-.theme-aurora .access-index {
+.theme-aurora .panel-kicker {
   color: #7cf1bf;
 }
 
@@ -1830,8 +1798,7 @@ onBeforeUnmount(() => {
   }
 
   .identity-copy,
-  .signal-readout,
-  .access-index {
+  .signal-readout {
     display: none;
   }
 
