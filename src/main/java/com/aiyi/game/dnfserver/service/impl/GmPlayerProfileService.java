@@ -170,7 +170,8 @@ public class GmPlayerProfileService {
                         "c.charac_name AS characName,c.lev AS level,c.job,c.grow_type AS growType," +
                         "c.village,c.exp AS experience,c.fatigue,c.max_fatigue AS maxFatigue," +
                         "c.premium_fatigue AS premiumFatigue,c.max_premium_fatigue AS maxPremiumFatigue," +
-                        "c.create_time AS createTime,c.last_play_time AS lastPlayTime,c.guild_id AS guildId," +
+                        "NULLIF(c.create_time,'0000-00-00 00:00:00') AS createTime," +
+                        "NULLIF(c.last_play_time,'0000-00-00 00:00:00') AS lastPlayTime,c.guild_id AS guildId," +
                         "i.money AS gold,s.total_play_time AS totalPlayTime,gi.guild_name AS guildName," +
                         "gm.grade AS guildGrade FROM taiwan_cain.charac_info c " +
                         "LEFT JOIN d_taiwan.accounts a ON a.UID=c.m_id " +

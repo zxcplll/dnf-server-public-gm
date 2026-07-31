@@ -1,5 +1,8 @@
 package com.aiyi.game.dnfserver.service.impl;
 
+import com.aiyi.game.dnfserver.entity.common.Item;
+import com.aiyi.game.dnfserver.entity.common.ItemType;
+import com.aiyi.game.dnfserver.pvf.PvfManager;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,6 +44,34 @@ public class GmInventoryServiceTest {
         assertEquals(2002, slots.get(1).get("itemId"));
         assertFalse((Boolean) slots.get(2).get("available"));
         assertTrue(String.valueOf(slots.get(2).get("error")).contains("物品 ID"));
+    }
+
+    @Test
+    public void normalizesEquippedItemsToSingleQuantity() throws Exception {
+        byte[] records = new byte[GmInventoryService.RECORD_SIZE];
+        writeRecord(records, 0, 1, 35651, 1956604058);
+        GmInventoryService service = new GmInventoryService();
+
+        List<Map<String, Object>> slots = service.parseBlob("equipslot", compress(records));
+
+        assertEquals(1L, slots.get(0).get("quantity"));
+    }
+
+    @Test
+    public void normalizesInventoryEquipmentToSingleQuantity() throws Exception {
+        byte[] records = new byte[GmInventoryService.RECORD_SIZE];
+        writeRecord(records, 0, 1, 35651, 1956604058);
+        PvfManager pvfManager = mock(PvfManager.class);
+        Item equipment = new Item();
+        equipment.setType(ItemType.equipment);
+        when(pvfManager.findItem(35651)).thenReturn(equipment);
+        GmInventoryService service = new GmInventoryService();
+        ReflectionTestUtils.setField(service, "pvfManager", pvfManager);
+
+        List<Map<String, Object>> slots = service.parseBlob("inventory", compress(records));
+        List<Map<String, Object>> enriched = ReflectionTestUtils.invokeMethod(service, "enrich", slots);
+
+        assertEquals(1L, enriched.get(0).get("quantity"));
     }
 
     @Test

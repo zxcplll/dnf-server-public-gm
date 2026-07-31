@@ -8,11 +8,15 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.mockito.ArgumentCaptor;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class GmPlayerProfileServiceTest {
@@ -45,5 +49,28 @@ public class GmPlayerProfileServiceTest {
         assertEquals(1000L, profile.get("gold"));
         assertEquals("UNAVAILABLE", ((Map<?, ?>) profile.get("runtime")).get("status"));
         assertTrue(String.valueOf(((Map<?, ?>) profile.get("runtime")).get("reason")).contains("offline"));
+    }
+
+    @Test
+    public void normalizesZeroDatesBeforeJdbcMapsCharacterProfile() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GameRuntimeClient runtime = mock(GameRuntimeClient.class);
+        GmPlayerProfileService service = new GmPlayerProfileService();
+        ReflectionTestUtils.setField(service, "jdbcTemplate", jdbcTemplate);
+        ReflectionTestUtils.setField(service, "gameRuntimeClient", runtime);
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("accountId", 18000013L);
+        row.put("characNo", 23);
+        when(jdbcTemplate.queryForList(anyString(), eq(23)))
+                .thenReturn(Collections.singletonList(row));
+        when(runtime.findOnlineCharacter(18000013)).thenThrow(new IllegalStateException("offline"));
+
+        service.basic(23);
+
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForList(query.capture(), eq(23));
+        assertTrue(query.getValue().contains("NULLIF(c.create_time,'0000-00-00 00:00:00') AS createTime"));
+        assertTrue(query.getValue().contains("NULLIF(c.last_play_time,'0000-00-00 00:00:00') AS lastPlayTime"));
     }
 }

@@ -2,6 +2,7 @@ package com.aiyi.game.dnfserver.service.impl;
 
 import com.aiyi.core.exception.ValidationException;
 import com.aiyi.game.dnfserver.entity.common.Item;
+import com.aiyi.game.dnfserver.entity.common.ItemType;
 import com.aiyi.game.dnfserver.pvf.PvfManager;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -274,8 +275,9 @@ public class GmInventoryService {
         try {
             int kind = records[offset + 1] & 0xff;
             int itemId = ByteBuffer.wrap(records, offset + 2, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-            long quantity = Integer.toUnsignedLong(
+            long encodedQuantity = Integer.toUnsignedLong(
                     ByteBuffer.wrap(records, offset + 7, 4).order(ByteOrder.LITTLE_ENDIAN).getInt());
+            long quantity = "equipslot".equals(group) && itemId > 0 ? 1L : encodedQuantity;
             result.put("kind", kind);
             result.put("itemId", itemId);
             result.put("quantity", quantity);
@@ -309,6 +311,9 @@ public class GmInventoryService {
             slot.put("resolved", true);
             slot.put("name", item.getName());
             slot.put("type", item.getType() == null ? "other" : item.getType().name());
+            if (item.getType() == ItemType.equipment) {
+                slot.put("quantity", 1L);
+            }
             slot.put("rarity", item.getRarity());
             slot.put("minimumLevel", item.getMinimumLevel());
             slot.put("attachType", item.getAttachTypeStr());
