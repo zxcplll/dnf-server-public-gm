@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import Request from '../api/Request.ts';
 import router from '../router';
 
@@ -11,6 +11,144 @@ interface SceneNode {
   phase: number;
 }
 
+type PreviewTheme = 'midnight' | 'quantum' | 'aurora';
+type SceneEffect = 'network' | 'matrix' | 'gravity' | 'wave';
+
+interface EffectMeta {
+  key: SceneEffect;
+  index: string;
+  name: string;
+  caption: string;
+}
+
+interface ThemeMeta {
+  key: PreviewTheme;
+  index: string;
+  name: string;
+  systemCode: string;
+  headline: string;
+  subtitle: string;
+  panelKicker: string;
+  accessLabel: string;
+}
+
+interface ScenePalette {
+  grid: string;
+  connection: [number, number, number];
+  node: [number, number, number];
+  scanner: string;
+  scannerFill: string;
+  signature: string;
+  horizon: number;
+  vanishingX: number;
+}
+
+interface MatrixColumn {
+  x: number;
+  y: number;
+  speed: number;
+  length: number;
+  phase: number;
+}
+
+const themeOptions: ThemeMeta[] = [
+  {
+    key: 'midnight',
+    index: '01',
+    name: '深夜控制台',
+    systemCode: 'CONTROL NODE 01',
+    headline: '运营控制台',
+    subtitle: 'DNF 游戏服务管理入口',
+    panelKicker: 'OPERATOR ACCESS',
+    accessLabel: 'SECURE CONTROL',
+  },
+  {
+    key: 'quantum',
+    index: '02',
+    name: '量子导航舱',
+    systemCode: 'QUANTUM LINK 02',
+    headline: '量子指挥舱',
+    subtitle: '跨节点运行状态与身份接入',
+    panelKicker: 'NAVIGATION AUTH',
+    accessLabel: 'VECTOR LOCK',
+  },
+  {
+    key: 'aurora',
+    index: '03',
+    name: '极光作业台',
+    systemCode: 'AURORA OPS 03',
+    headline: '极光作业台',
+    subtitle: '实时运维流与权限校验入口',
+    panelKicker: 'SIGNAL ACCESS',
+    accessLabel: 'CHANNEL READY',
+  },
+];
+
+const themeByKey = Object.fromEntries(themeOptions.map((option) => [option.key, option])) as Record<PreviewTheme, ThemeMeta>;
+const effectOptions: EffectMeta[] = [
+  { key: 'network', index: 'A', name: '星空连线', caption: 'NETWORK FIELD' },
+  { key: 'matrix', index: 'B', name: '数据雨', caption: 'MATRIX STREAM' },
+  { key: 'gravity', index: 'C', name: '引力井', caption: 'GRAVITY WELL' },
+  { key: 'wave', index: 'D', name: '波浪扫描', caption: 'WAVE SCAN' },
+];
+const effectByKey = Object.fromEntries(effectOptions.map((option) => [option.key, option])) as Record<SceneEffect, EffectMeta>;
+const scenePalettes: Record<PreviewTheme, ScenePalette> = {
+  midnight: {
+    grid: 'rgba(52, 226, 218, 0.105)',
+    connection: [61, 223, 215],
+    node: [142, 255, 249],
+    scanner: 'rgba(101, 255, 246, 0.23)',
+    scannerFill: 'rgba(64, 232, 221, 0.025)',
+    signature: 'rgba(103, 246, 236, 0.12)',
+    horizon: 0.42,
+    vanishingX: 0.38,
+  },
+  quantum: {
+    grid: 'rgba(88, 153, 255, 0.12)',
+    connection: [88, 153, 255],
+    node: [164, 206, 255],
+    scanner: 'rgba(255, 180, 84, 0.28)',
+    scannerFill: 'rgba(255, 180, 84, 0.025)',
+    signature: 'rgba(115, 173, 255, 0.18)',
+    horizon: 0.34,
+    vanishingX: 0.57,
+  },
+  aurora: {
+    grid: 'rgba(92, 221, 167, 0.105)',
+    connection: [92, 221, 167],
+    node: [177, 255, 219],
+    scanner: 'rgba(255, 138, 114, 0.26)',
+    scannerFill: 'rgba(255, 138, 114, 0.024)',
+    signature: 'rgba(124, 241, 191, 0.16)',
+    horizon: 0.52,
+    vanishingX: 0.2,
+  },
+};
+
+const searchParams = new URLSearchParams(window.location.search);
+const previewEnabled = searchParams.get('preview') === '1';
+const requestedTheme = searchParams.get('theme') as PreviewTheme | null;
+const requestedEffect = searchParams.get('effect') as SceneEffect | null;
+const previewTheme = ref<PreviewTheme>(
+  previewEnabled && requestedTheme && Object.prototype.hasOwnProperty.call(themeByKey, requestedTheme)
+    ? requestedTheme
+    : 'aurora',
+);
+const sceneEffect = ref<SceneEffect>(
+  previewEnabled && requestedEffect && Object.prototype.hasOwnProperty.call(effectByKey, requestedEffect)
+    ? requestedEffect
+    : 'matrix',
+);
+const activeTheme = computed(() => themeByKey[previewTheme.value]);
+const activeEffect = computed(() => effectByKey[sceneEffect.value]);
+
+const tickerRows = [
+  'AUTH.OK  /  UID.SCAN  /  PVF.CACHE  /  GATEWAY.27043  /  FRIDA.ONLINE',
+  '角色在线  /  邮件队列  /  公会同步  /  资源监控  /  SESSION.READY',
+  'DB.SNAPSHOT  /  ITEM.INDEX  /  TASK.RUNNER  /  ACCESS.GRANTED  /  NODE.03',
+  'DNF-ADMIN  /  CONTROL BUS  /  STATUS.LIVE  /  PACKET.LINK  /  OPS.MODE',
+];
+
 const form = reactive({
   account: '',
   password: '',
@@ -20,6 +158,12 @@ const sceneCanvas = ref<HTMLCanvasElement | null>(null);
 const submitting = ref(false);
 const statusText = ref('等待身份验证');
 const errorText = ref('');
+const pointerStyle = reactive<Record<string, string>>({
+  '--pointer-x': '50%',
+  '--pointer-y': '50%',
+  '--panel-tilt-x': '0deg',
+  '--panel-tilt-y': '0deg',
+});
 
 let stopScene: (() => void) | undefined;
 
@@ -37,6 +181,48 @@ const clearError = () => {
 
 const focusField = (id: string) => {
   document.getElementById(id)?.focus();
+};
+
+const selectPreviewTheme = (theme: PreviewTheme) => {
+  previewTheme.value = theme;
+  if (!previewEnabled) return;
+
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set('preview', '1');
+  nextUrl.searchParams.set('theme', theme);
+  window.history.replaceState({}, '', nextUrl);
+  window.dispatchEvent(new Event('resize'));
+};
+
+const selectPreviewEffect = (effect: SceneEffect) => {
+  sceneEffect.value = effect;
+  if (!previewEnabled) return;
+
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set('preview', '1');
+  nextUrl.searchParams.set('effect', effect);
+  nextUrl.searchParams.set('theme', previewTheme.value);
+  window.history.replaceState({}, '', nextUrl);
+  window.dispatchEvent(new Event('resize'));
+};
+
+const updatePointerEffect = (event: PointerEvent) => {
+  const target = event.currentTarget as HTMLElement | null;
+  if (!target || event.pointerType === 'touch') return;
+  const bounds = target.getBoundingClientRect();
+  const x = Math.min(100, Math.max(0, ((event.clientX - bounds.left) / bounds.width) * 100));
+  const y = Math.min(100, Math.max(0, ((event.clientY - bounds.top) / bounds.height) * 100));
+  pointerStyle['--pointer-x'] = `${x}%`;
+  pointerStyle['--pointer-y'] = `${y}%`;
+  pointerStyle['--panel-tilt-x'] = `${(50 - y) / 24}deg`;
+  pointerStyle['--panel-tilt-y'] = `${(x - 50) / 28}deg`;
+};
+
+const resetPointerEffect = () => {
+  pointerStyle['--pointer-x'] = '50%';
+  pointerStyle['--pointer-y'] = '50%';
+  pointerStyle['--panel-tilt-x'] = '0deg';
+  pointerStyle['--panel-tilt-y'] = '0deg';
 };
 
 const login = async () => {
@@ -77,6 +263,7 @@ const startScene = (canvas: HTMLCanvasElement | null) => {
   let width = 0;
   let height = 0;
   let nodes: SceneNode[] = [];
+  let matrixColumns: MatrixColumn[] = [];
   let disposed = false;
 
   const resize = () => {
@@ -96,13 +283,128 @@ const startScene = (canvas: HTMLCanvasElement | null) => {
       vy: -0.018 - Math.random() * 0.04,
       phase: Math.random() * Math.PI * 2,
     }));
+
+    const matrixCount = Math.max(18, Math.min(72, Math.round(width / 24)));
+    matrixColumns = Array.from({ length: matrixCount }, (_, index) => ({
+      x: (index + 0.5) * (width / matrixCount),
+      y: Math.random() * height,
+      speed: 0.025 + Math.random() * 0.045,
+      length: 7 + Math.round(Math.random() * 14),
+      phase: Math.random() * Math.PI * 2,
+    }));
+  };
+
+  const drawMatrixRain = (time: number) => {
+    const palette = scenePalettes[previewTheme.value];
+    const glyphs = '01<>[]{}\\/+*#X';
+    const step = 15;
+    context.save();
+    context.font = '11px JetBrains Mono, Cascadia Code, Consolas, monospace';
+    context.textAlign = 'center';
+    matrixColumns.forEach((column) => {
+      const travel = motionQuery.matches ? 0 : time * column.speed;
+      const head = (column.y + travel) % (height + column.length * step);
+      for (let index = 0; index < column.length; index += 1) {
+        const y = head - index * step;
+        if (y < -step || y > height + step) continue;
+        const alpha = Math.max(0.08, 0.74 - index / (column.length + 1));
+        context.fillStyle = index === 0
+          ? `rgba(${palette.node.join(', ')}, 0.92)`
+          : `rgba(${palette.connection.join(', ')}, ${alpha * 0.52})`;
+        const glyphIndex = Math.floor(index + column.phase * 3 + (motionQuery.matches ? 0 : time * 0.004)) % glyphs.length;
+        context.fillText(glyphs[glyphIndex] || '0', column.x, y);
+      }
+    });
+    context.restore();
+  };
+
+  const drawGravityWell = (time: number) => {
+    const palette = scenePalettes[previewTheme.value];
+    const centerX = width * (previewTheme.value === 'aurora' ? 0.28 : 0.7);
+    const centerY = height * 0.46;
+    const drift = motionQuery.matches ? 0 : time * 0.00055;
+    context.save();
+
+    const glow = context.createRadialGradient(centerX, centerY, 6, centerX, centerY, Math.max(width, height) * 0.38);
+    glow.addColorStop(0, 'rgba(3, 7, 11, 0.98)');
+    glow.addColorStop(0.18, `rgba(${palette.connection.join(', ')}, 0.1)`);
+    glow.addColorStop(1, 'rgba(3, 7, 11, 0)');
+    context.fillStyle = glow;
+    context.fillRect(0, 0, width, height);
+
+    context.strokeStyle = `rgba(${palette.connection.join(', ')}, 0.23)`;
+    context.lineWidth = 1;
+    for (let ring = 0; ring < 5; ring += 1) {
+      context.beginPath();
+      context.ellipse(
+        centerX,
+        centerY,
+        36 + ring * 31,
+        10 + ring * 13,
+        drift + ring * 0.16,
+        0,
+        Math.PI * 2,
+      );
+      context.stroke();
+    }
+
+    nodes.slice(0, 34).forEach((node, index) => {
+      const radius = 56 + (index * 23) % Math.max(80, Math.min(width, height) * 0.6);
+      const angle = drift * (1 + (index % 3) * 0.24) + node.phase + index * 0.21;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius * 0.36;
+      context.fillStyle = `rgba(${palette.node.join(', ')}, ${0.24 + (index % 5) * 0.08})`;
+      context.fillRect(x, y, index % 4 === 0 ? 3 : 2, index % 4 === 0 ? 3 : 2);
+    });
+
+    context.fillStyle = '#020407';
+    context.beginPath();
+    context.arc(centerX, centerY, 18, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = `rgba(${palette.node.join(', ')}, 0.84)`;
+    context.beginPath();
+    context.arc(centerX, centerY, 22, 0, Math.PI * 2);
+    context.stroke();
+    context.restore();
+  };
+
+  const drawWaveField = (time: number) => {
+    const palette = scenePalettes[previewTheme.value];
+    const phase = motionQuery.matches ? 0 : time * 0.00055;
+    context.save();
+    context.lineWidth = 1;
+    for (let band = 0; band < 14; band += 1) {
+      const baseline = height * 0.2 + band * (height * 0.062);
+      const amplitude = 8 + band * 0.8;
+      context.strokeStyle = `rgba(${palette.connection.join(', ')}, ${0.06 + (band % 4) * 0.025})`;
+      context.beginPath();
+      for (let x = 0; x <= width; x += 10) {
+        const y = baseline
+          + Math.sin(x * 0.012 + phase + band * 0.58) * amplitude
+          + Math.sin(x * 0.027 - phase * 0.7 + band) * (amplitude * 0.3);
+        if (x === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      }
+      context.stroke();
+    }
+
+    const scanX = motionQuery.matches ? width * 0.52 : ((time * 0.09) % (width + 260)) - 130;
+    context.strokeStyle = palette.scanner;
+    context.fillStyle = palette.scannerFill;
+    context.fillRect(scanX - 48, 0, 96, height);
+    context.beginPath();
+    context.moveTo(scanX, 0);
+    context.lineTo(scanX, height);
+    context.stroke();
+    context.restore();
   };
 
   const drawPerspectiveGrid = (time: number) => {
-    const horizon = height * 0.42;
-    const vanishingX = width * 0.38;
+    const palette = scenePalettes[previewTheme.value];
+    const horizon = height * palette.horizon;
+    const vanishingX = width * palette.vanishingX;
     context.save();
-    context.strokeStyle = 'rgba(52, 226, 218, 0.105)';
+    context.strokeStyle = palette.grid;
     context.lineWidth = 1;
 
     for (let x = -width; x <= width * 2; x += 92) {
@@ -128,7 +430,52 @@ const startScene = (canvas: HTMLCanvasElement | null) => {
     context.restore();
   };
 
+  const drawThemeSignature = (time: number) => {
+    const theme = previewTheme.value;
+    if (theme === 'midnight') return;
+
+    const palette = scenePalettes[theme];
+    context.save();
+    context.strokeStyle = palette.signature;
+    context.lineWidth = 1;
+
+    if (theme === 'quantum') {
+      const centerX = width * 0.72;
+      const centerY = height * 0.34;
+      const drift = motionQuery.matches ? 0 : time * 0.00008;
+      for (let index = 0; index < 3; index += 1) {
+        context.beginPath();
+        context.ellipse(
+          centerX,
+          centerY,
+          120 + index * 48,
+          28 + index * 16,
+          drift + index * 0.52,
+          0,
+          Math.PI * 2,
+        );
+        context.stroke();
+      }
+      context.fillStyle = 'rgba(255, 180, 84, 0.64)';
+      context.fillRect(centerX - 2, centerY - 2, 4, 4);
+    } else {
+      for (let band = 0; band < 3; band += 1) {
+        const baseline = height * (0.56 + band * 0.09);
+        context.beginPath();
+        for (let x = 0; x <= width; x += 12) {
+          const phase = motionQuery.matches ? 0 : time * 0.0007;
+          const y = baseline + Math.sin(x * 0.018 + phase + band * 1.7) * (8 + band * 2);
+          if (x === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        }
+        context.stroke();
+      }
+    }
+    context.restore();
+  };
+
   const drawNodes = (time: number) => {
+    const palette = scenePalettes[previewTheme.value];
     if (!motionQuery.matches) {
       nodes.forEach((node) => {
         node.x += node.vx;
@@ -151,7 +498,7 @@ const startScene = (canvas: HTMLCanvasElement | null) => {
         const dy = first.y - second.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         if (distance < 126) {
-          context.strokeStyle = `rgba(61, 223, 215, ${0.12 * (1 - distance / 126)})`;
+          context.strokeStyle = `rgba(${palette.connection.join(', ')}, ${0.12 * (1 - distance / 126)})`;
           context.beginPath();
           context.moveTo(first.x, first.y);
           context.lineTo(second.x, second.y);
@@ -160,31 +507,47 @@ const startScene = (canvas: HTMLCanvasElement | null) => {
       }
 
       const pulse = motionQuery.matches ? 0.72 : 0.54 + Math.sin(time * 0.0014 + first.phase) * 0.22;
-      context.fillStyle = `rgba(142, 255, 249, ${pulse})`;
+      context.fillStyle = `rgba(${palette.node.join(', ')}, ${pulse})`;
       context.fillRect(first.x - 1, first.y - 1, 2, 2);
     }
     context.restore();
   };
 
   const drawScanner = (time: number) => {
+    const palette = scenePalettes[previewTheme.value];
     const scanY = motionQuery.matches ? height * 0.65 : ((time * 0.052) % (height + 220)) - 110;
     context.save();
-    context.strokeStyle = 'rgba(101, 255, 246, 0.23)';
+    context.strokeStyle = palette.scanner;
     context.lineWidth = 1;
     context.beginPath();
     context.moveTo(0, scanY);
     context.lineTo(width, scanY);
     context.stroke();
-    context.fillStyle = 'rgba(64, 232, 221, 0.025)';
+    context.fillStyle = palette.scannerFill;
     context.fillRect(0, scanY - 26, width, 52);
     context.restore();
   };
 
   const render = (time = 0) => {
     context.clearRect(0, 0, width, height);
-    drawPerspectiveGrid(time);
-    drawNodes(time);
-    drawScanner(time);
+    if (sceneEffect.value === 'matrix') {
+      drawPerspectiveGrid(time);
+      drawMatrixRain(time);
+      drawThemeSignature(time);
+      drawScanner(time);
+    } else if (sceneEffect.value === 'gravity') {
+      drawGravityWell(time);
+      drawScanner(time);
+    } else if (sceneEffect.value === 'wave') {
+      drawPerspectiveGrid(time);
+      drawWaveField(time);
+      drawThemeSignature(time);
+    } else {
+      drawPerspectiveGrid(time);
+      drawThemeSignature(time);
+      drawNodes(time);
+      drawScanner(time);
+    }
     if (!disposed && !motionQuery.matches) {
       animationFrame = window.requestAnimationFrame(render);
     }
@@ -223,11 +586,65 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="login-page">
+  <main
+    class="login-page"
+    :class="[`theme-${previewTheme}`, { 'preview-active': previewEnabled }]"
+    :style="pointerStyle"
+    @pointermove="updatePointerEffect"
+    @pointerleave="resetPointerEffect"
+  >
     <canvas ref="sceneCanvas" class="scene-canvas" aria-hidden="true"></canvas>
+
+    <div class="ticker-field" aria-hidden="true">
+      <div
+        v-for="(row, index) in tickerRows"
+        :key="row"
+        class="ticker-row"
+        :class="`ticker-row-${index + 1}`"
+      >
+        <span v-for="copy in 2" :key="copy">{{ row }}</span>
+      </div>
+    </div>
+
+    <div class="cursor-reticle" aria-hidden="true"></div>
 
     <div class="ambient-rail ambient-rail-top" aria-hidden="true"></div>
     <div class="ambient-rail ambient-rail-bottom" aria-hidden="true"></div>
+
+    <nav v-if="previewEnabled" class="preview-switcher" aria-label="登录页方案预览">
+      <span class="preview-switcher-label">LOGIN VIEW</span>
+      <div class="preview-options" role="group" aria-label="切换登录页方案">
+        <button
+          v-for="option in themeOptions"
+          :key="option.key"
+          type="button"
+          :class="{ active: previewTheme === option.key }"
+          :aria-pressed="previewTheme === option.key"
+          @click="selectPreviewTheme(option.key)"
+        >
+          <span>{{ option.index }}</span>
+          {{ option.name }}
+        </button>
+      </div>
+    </nav>
+
+    <nav v-if="previewEnabled" class="scene-effect-switcher" aria-label="Scene effects">
+      <span class="scene-effect-label">SCENE LAB / {{ activeEffect.caption }}</span>
+      <div class="scene-effect-options" role="group" aria-label="Select scene effect">
+        <button
+          v-for="option in effectOptions"
+          :key="option.key"
+          type="button"
+          :class="{ active: sceneEffect === option.key }"
+          :aria-pressed="sceneEffect === option.key"
+          :title="option.caption"
+          @click="selectPreviewEffect(option.key)"
+        >
+          <span>{{ option.index }}</span>
+          {{ option.name }}
+        </button>
+      </div>
+    </nav>
 
     <section class="login-layout">
       <div class="identity-zone">
@@ -239,9 +656,9 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="identity-copy">
-          <span class="system-code">CONTROL NODE 01</span>
-          <h1>运营控制台</h1>
-          <p>DNF 游戏服务管理入口</p>
+          <span class="system-code">{{ activeTheme.systemCode }}</span>
+          <h1>{{ activeTheme.headline }}</h1>
+          <p>{{ activeTheme.subtitle }}</p>
         </div>
 
         <div class="signal-readout" aria-hidden="true">
@@ -257,13 +674,13 @@ onBeforeUnmount(() => {
       <div class="access-zone">
         <div class="access-index" aria-hidden="true">
           <span>AUTH</span>
-          <strong>01</strong>
+          <strong>{{ activeTheme.index }}</strong>
         </div>
 
         <section class="login-panel" aria-labelledby="login-title">
           <header class="panel-header">
             <div>
-              <span class="panel-kicker">OPERATOR ACCESS</span>
+              <span class="panel-kicker">{{ activeTheme.panelKicker }}</span>
               <h2 id="login-title">管理员登录</h2>
             </div>
             <span class="panel-status" :class="{ busy: submitting }" aria-hidden="true">
@@ -334,7 +751,7 @@ onBeforeUnmount(() => {
 
           <footer class="panel-footer">
             <span class="connection-state" role="status" aria-live="polite"><i></i>{{ statusText }}</span>
-            <span class="access-label">SECURE CONTROL</span>
+            <span class="access-label">{{ activeTheme.accessLabel }}</span>
           </footer>
         </section>
       </div>
@@ -344,12 +761,32 @@ onBeforeUnmount(() => {
 
 <style scoped lang="less">
 .login-page {
+  --preview-accent: #61f5eb;
+  --preview-accent-soft: rgba(97, 245, 235, 0.24);
+  --preview-secondary: #5ff4b7;
+  --preview-panel: rgba(7, 14, 22, 0.88);
   position: relative;
   min-height: 100dvh;
   overflow: hidden;
   color: #eefeff;
   background: #05080d;
   isolation: isolate;
+}
+
+.login-page.theme-quantum {
+  --preview-accent: #78aefc;
+  --preview-accent-soft: rgba(120, 174, 252, 0.28);
+  --preview-secondary: #ffb454;
+  --preview-panel: rgba(7, 15, 28, 0.9);
+  background: #050b15;
+}
+
+.login-page.theme-aurora {
+  --preview-accent: #7cf1bf;
+  --preview-accent-soft: rgba(124, 241, 191, 0.26);
+  --preview-secondary: #ff8a72;
+  --preview-panel: rgba(7, 18, 15, 0.9);
+  background: #060f0d;
 }
 
 .login-page::before,
@@ -382,6 +819,82 @@ onBeforeUnmount(() => {
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.ticker-field {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  color: var(--preview-accent);
+  opacity: 0.82;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.ticker-row {
+  position: absolute;
+  left: -25%;
+  display: flex;
+  gap: 56px;
+  width: max-content;
+  color: currentColor;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  opacity: 0.16;
+  white-space: nowrap;
+  animation: ticker-left 34s linear infinite;
+}
+
+.ticker-row span {
+  flex: 0 0 auto;
+}
+
+.ticker-row-1 { top: 18%; animation-duration: 32s; }
+.ticker-row-2 { top: 36%; opacity: 0.12; animation: ticker-right 42s linear infinite; }
+.ticker-row-3 { top: 64%; opacity: 0.14; animation-duration: 38s; }
+.ticker-row-4 { top: 82%; opacity: 0.1; animation: ticker-right 48s linear infinite; }
+
+.cursor-reticle {
+  position: absolute;
+  z-index: 1;
+  top: var(--pointer-y);
+  left: var(--pointer-x);
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--preview-accent-soft);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 7px rgba(5, 10, 16, 0.06), 0 0 22px var(--preview-accent-soft);
+  opacity: 0.58;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: top 100ms ease-out, left 100ms ease-out;
+}
+
+.cursor-reticle::before,
+.cursor-reticle::after {
+  position: absolute;
+  content: '';
+  background: var(--preview-accent);
+  opacity: 0.72;
+}
+
+.cursor-reticle::before {
+  top: -12px;
+  bottom: -12px;
+  left: 50%;
+  width: 1px;
+}
+
+.cursor-reticle::after {
+  top: 50%;
+  right: -12px;
+  left: -12px;
+  height: 1px;
 }
 
 .ambient-rail {
@@ -420,7 +933,157 @@ onBeforeUnmount(() => {
   bottom: 28px;
 }
 
+.preview-switcher {
+  position: absolute;
+  z-index: 5;
+  top: 20px;
+  left: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 5px;
+  border: 1px solid rgba(126, 164, 176, 0.22);
+  border-radius: 5px;
+  background: rgba(5, 10, 16, 0.92);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateX(-50%);
+  backdrop-filter: blur(14px);
+}
+
+.preview-switcher-label {
+  padding: 0 13px 0 10px;
+  color: #718a95;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.preview-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(108px, 1fr));
+  gap: 3px;
+  height: 36px;
+}
+
+.preview-options button {
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #91a6af;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  background: transparent;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.preview-options button span {
+  margin-right: 5px;
+  color: #607781;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 9px;
+}
+
+.preview-options button:hover {
+  color: #e9ffff;
+  border-color: rgba(142, 185, 197, 0.24);
+  background: rgba(139, 184, 196, 0.07);
+}
+
+.preview-options button.active {
+  color: #f5ffff;
+  border-color: var(--preview-accent-soft);
+  background: rgba(138, 184, 196, 0.12);
+  box-shadow: inset 0 -2px 0 var(--preview-accent);
+}
+
+.preview-options button.active span {
+  color: var(--preview-secondary);
+}
+
+.scene-effect-switcher {
+  position: absolute;
+  z-index: 5;
+  top: 76px;
+  left: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid rgba(126, 164, 176, 0.18);
+  border-radius: 4px;
+  background: rgba(5, 10, 16, 0.82);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.scene-effect-label {
+  padding: 0 10px 0 8px;
+  color: #607781;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.scene-effect-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(86px, 1fr));
+  gap: 3px;
+  height: 30px;
+}
+
+.scene-effect-options button {
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 9px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #8299a4;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  background: transparent;
+  transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+}
+
+.scene-effect-options button span {
+  margin-right: 4px;
+  color: #5e7581;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 9px;
+}
+
+.scene-effect-options button:hover,
+.scene-effect-options button.active {
+  color: #f2ffff;
+  border-color: var(--preview-accent-soft);
+  background: rgba(118, 187, 194, 0.1);
+}
+
+.scene-effect-options button.active {
+  box-shadow: inset 0 -2px 0 var(--preview-accent);
+}
+
 .login-layout {
+  position: relative;
+  z-index: 2;
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(390px, 460px);
@@ -586,6 +1249,10 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(102, 237, 228, 0.24);
   border-radius: 8px;
   background: rgba(7, 14, 22, 0.88);
+  transform: perspective(1200px) rotateX(var(--panel-tilt-x)) rotateY(var(--panel-tilt-y));
+  transform-style: preserve-3d;
+  transition: transform 140ms ease-out;
+  will-change: transform;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.065),
     0 30px 80px rgba(0, 0, 0, 0.42),
@@ -801,6 +1468,252 @@ onBeforeUnmount(() => {
   height: 6px;
 }
 
+.theme-quantum::before {
+  background:
+    linear-gradient(90deg, rgba(5, 11, 21, 0.2) 0, rgba(5, 11, 21, 0.02) 54%, rgba(5, 11, 21, 0.56) 100%),
+    repeating-linear-gradient(90deg, rgba(114, 170, 255, 0.022) 0, rgba(114, 170, 255, 0.022) 1px, transparent 1px, transparent 54px);
+}
+
+.theme-quantum::after {
+  width: 42%;
+  border-left-color: rgba(120, 174, 252, 0.14);
+  background: rgba(5, 12, 24, 0.26);
+}
+
+.theme-quantum .ambient-rail {
+  background: rgba(120, 174, 252, 0.28);
+}
+
+.theme-quantum .ambient-rail::before,
+.theme-quantum .ambient-rail::after {
+  border-color: rgba(120, 174, 252, 0.62);
+  background: #050b15;
+}
+
+.theme-quantum .brand-mark {
+  border-color: rgba(120, 174, 252, 0.42);
+  border-radius: 2px;
+  background: rgba(7, 16, 31, 0.84);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 28px rgba(69, 134, 239, 0.15);
+}
+
+.theme-quantum .brand-mark::before {
+  border-color: #78aefc;
+}
+
+.theme-quantum .brand-mark::after {
+  border-color: #ffb454;
+}
+
+.theme-quantum .system-code,
+.theme-quantum .panel-kicker {
+  color: #78aefc;
+}
+
+.theme-quantum .access-label,
+.theme-quantum .access-index {
+  color: #ffb454;
+}
+
+.theme-quantum .identity-copy h1 {
+  text-shadow: 0 0 42px rgba(78, 142, 244, 0.18);
+}
+
+.theme-quantum .signal-readout span {
+  border-color: rgba(120, 174, 252, 0.48);
+  background: rgba(72, 134, 233, 0.08);
+}
+
+.theme-quantum .signal-readout span:nth-child(2),
+.theme-quantum .signal-readout span:nth-child(5) {
+  border-top-color: rgba(255, 180, 84, 0.62);
+}
+
+.theme-quantum .login-panel {
+  border-color: rgba(120, 174, 252, 0.28);
+  border-radius: 3px;
+  background: var(--preview-panel);
+  box-shadow:
+    inset 4px 0 0 rgba(120, 174, 252, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 30px 80px rgba(0, 0, 0, 0.44),
+    0 0 50px rgba(67, 127, 222, 0.08);
+}
+
+.theme-quantum .login-panel::before {
+  width: 126px;
+  background: #78aefc;
+  box-shadow: 0 0 18px rgba(120, 174, 252, 0.58);
+}
+
+.theme-quantum .login-panel::after {
+  border-color: rgba(255, 180, 84, 0.62);
+}
+
+.theme-quantum .panel-status {
+  border-color: rgba(120, 174, 252, 0.32);
+}
+
+.theme-quantum .panel-status::before {
+  border-color: rgba(120, 174, 252, 0.48);
+}
+
+.theme-quantum .panel-status i {
+  background: #ffb454;
+  box-shadow: 0 0 12px rgba(255, 180, 84, 0.62);
+}
+
+.theme-quantum .login-form :deep(.arco-input-wrapper:hover) {
+  border-color: rgba(120, 174, 252, 0.5);
+}
+
+.theme-quantum .login-form :deep(.arco-input-wrapper.arco-input-focus) {
+  border-color: #78aefc;
+  background: rgba(6, 14, 27, 0.96);
+  box-shadow: 0 0 0 3px rgba(94, 153, 247, 0.13), inset 3px 0 0 #78aefc;
+}
+
+.theme-quantum .reset-button:hover {
+  border-color: rgba(120, 174, 252, 0.56) !important;
+}
+
+.theme-quantum .login-button {
+  border-color: #ffb454 !important;
+  color: #171006 !important;
+  background: #ffb454 !important;
+  box-shadow: 0 10px 28px rgba(255, 180, 84, 0.17);
+}
+
+.theme-quantum .login-button:hover {
+  border-color: #ffd092 !important;
+  background: #ffc46f !important;
+  box-shadow: 0 12px 32px rgba(255, 180, 84, 0.25);
+}
+
+.theme-aurora::before {
+  background:
+    linear-gradient(90deg, rgba(6, 15, 13, 0.12) 0, rgba(6, 15, 13, 0.02) 52%, rgba(6, 15, 13, 0.52) 100%),
+    repeating-linear-gradient(135deg, rgba(124, 241, 191, 0.018) 0, rgba(124, 241, 191, 0.018) 1px, transparent 1px, transparent 42px);
+}
+
+.theme-aurora::after {
+  width: 39%;
+  border-left-color: rgba(124, 241, 191, 0.12);
+  background: rgba(4, 16, 13, 0.22);
+}
+
+.theme-aurora .ambient-rail {
+  background: rgba(124, 241, 191, 0.25);
+}
+
+.theme-aurora .ambient-rail::before,
+.theme-aurora .ambient-rail::after {
+  border-color: rgba(255, 138, 114, 0.62);
+  background: #060f0d;
+}
+
+.theme-aurora .brand-mark {
+  border-color: rgba(124, 241, 191, 0.38);
+  background: rgba(7, 22, 17, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 0 28px rgba(74, 211, 153, 0.13);
+}
+
+.theme-aurora .brand-mark::before {
+  border-color: #7cf1bf;
+}
+
+.theme-aurora .brand-mark::after {
+  border-color: #ff8a72;
+}
+
+.theme-aurora .system-code,
+.theme-aurora .panel-kicker,
+.theme-aurora .access-index {
+  color: #7cf1bf;
+}
+
+.theme-aurora .access-label {
+  color: #ff9b86;
+}
+
+.theme-aurora .identity-copy h1 {
+  text-shadow: 0 0 42px rgba(84, 222, 163, 0.16);
+}
+
+.theme-aurora .signal-readout span {
+  border-color: rgba(124, 241, 191, 0.48);
+  background: rgba(78, 207, 151, 0.08);
+}
+
+.theme-aurora .signal-readout span:nth-child(3),
+.theme-aurora .signal-readout span:nth-child(6) {
+  border-top-color: rgba(255, 138, 114, 0.64);
+}
+
+.theme-aurora .login-panel {
+  border-color: rgba(124, 241, 191, 0.25);
+  border-left: 2px solid rgba(255, 138, 114, 0.68);
+  border-radius: 7px 2px 7px 2px;
+  background: var(--preview-panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 30px 80px rgba(0, 0, 0, 0.43),
+    0 0 50px rgba(66, 196, 139, 0.07);
+}
+
+.theme-aurora .login-panel::before {
+  top: 34px;
+  left: 0;
+  width: 2px;
+  height: 88px;
+  background: #ff8a72;
+  box-shadow: 0 0 16px rgba(255, 138, 114, 0.55);
+}
+
+.theme-aurora .login-panel::after {
+  border-color: rgba(124, 241, 191, 0.56);
+}
+
+.theme-aurora .panel-status {
+  border-color: rgba(124, 241, 191, 0.3);
+}
+
+.theme-aurora .panel-status::before {
+  border-color: rgba(124, 241, 191, 0.45);
+}
+
+.theme-aurora .panel-status i {
+  background: #7cf1bf;
+  box-shadow: 0 0 12px rgba(124, 241, 191, 0.62);
+}
+
+.theme-aurora .login-form :deep(.arco-input-wrapper:hover) {
+  border-color: rgba(124, 241, 191, 0.5);
+}
+
+.theme-aurora .login-form :deep(.arco-input-wrapper.arco-input-focus) {
+  border-color: #7cf1bf;
+  background: rgba(5, 19, 15, 0.96);
+  box-shadow: 0 0 0 3px rgba(94, 219, 164, 0.12), inset 3px 0 0 #7cf1bf;
+}
+
+.theme-aurora .reset-button:hover {
+  border-color: rgba(124, 241, 191, 0.54) !important;
+}
+
+.theme-aurora .login-button {
+  border-color: #ff8a72 !important;
+  color: #190b08 !important;
+  background: #ff8a72 !important;
+  box-shadow: 0 10px 28px rgba(255, 138, 114, 0.16);
+}
+
+.theme-aurora .login-button:hover {
+  border-color: #ffb4a4 !important;
+  background: #ffa08c !important;
+  box-shadow: 0 12px 32px rgba(255, 138, 114, 0.24);
+}
+
 @keyframes signal {
   0%, 100% { opacity: 0.45; transform: scaleY(0.72); }
   50% { opacity: 1; transform: scaleY(1); }
@@ -808,6 +1721,16 @@ onBeforeUnmount(() => {
 
 @keyframes rotate {
   to { transform: rotate(360deg); }
+}
+
+@keyframes ticker-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes ticker-right {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
 }
 
 @media (max-width: 980px) {
@@ -835,12 +1758,50 @@ onBeforeUnmount(() => {
   .ambient-rail-top { top: 16px; }
   .ambient-rail-bottom { bottom: 16px; }
 
+  .preview-switcher {
+    top: 84px;
+    right: 18px;
+    left: 18px;
+    width: auto;
+    transform: none;
+  }
+
+  .preview-switcher-label {
+    display: none;
+  }
+
+  .preview-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .scene-effect-switcher {
+    top: 136px;
+    right: 18px;
+    left: 18px;
+    width: auto;
+    transform: none;
+  }
+
+  .scene-effect-label {
+    display: none;
+  }
+
+  .scene-effect-options {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
   .login-layout {
     display: flex;
     flex-direction: column;
     justify-content: center;
     min-height: 100dvh;
     padding: 74px 18px 54px;
+  }
+
+  .preview-active .login-layout {
+    padding-top: 196px;
   }
 
   .identity-zone {
@@ -921,6 +1882,34 @@ onBeforeUnmount(() => {
     padding: 24px 18px;
   }
 
+  .preview-switcher {
+    right: 12px;
+    left: 12px;
+  }
+
+  .preview-options button {
+    padding: 0 5px;
+    font-size: 11px;
+  }
+
+  .preview-options button span {
+    margin-right: 3px;
+  }
+
+  .scene-effect-switcher {
+    right: 12px;
+    left: 12px;
+  }
+
+  .scene-effect-options button {
+    padding: 0 3px;
+    font-size: 10px;
+  }
+
+  .scene-effect-options button span {
+    margin-right: 2px;
+  }
+
   .access-label {
     display: none;
   }
@@ -932,12 +1921,20 @@ onBeforeUnmount(() => {
     padding-top: 88px;
     padding-bottom: 32px;
   }
+
+  .preview-active .login-layout {
+    padding-top: 196px;
+  }
 }
 
 @media (max-height: 680px) and (min-width: 861px) {
   .login-layout {
     padding-top: 40px;
     padding-bottom: 40px;
+  }
+
+  .preview-active .login-layout {
+    padding-top: 140px;
   }
 
   .identity-copy {
@@ -951,8 +1948,18 @@ onBeforeUnmount(() => {
 
 @media (prefers-reduced-motion: reduce) {
   .signal-readout span,
-  .panel-status::before {
+  .panel-status::before,
+  .ticker-row {
     animation: none;
+  }
+
+  .cursor-reticle {
+    display: none;
+  }
+
+  .login-panel {
+    transform: none;
+    transition: none;
   }
 
   .login-actions :deep(.arco-btn) {
