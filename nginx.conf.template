@@ -12,10 +12,22 @@ http {
         listen       ${NGINX_PORT};
         server_name  localhost;
         client_max_body_size 1G;
+        root   /app/static;
 
         # Frontend
+        location = /index.html {
+            expires -1;
+            add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" always;
+            add_header Pragma "no-cache" always;
+        }
+
+        location /assets/ {
+            try_files $uri =404;
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+        }
+
         location / {
-            root   /app/static;
             index  index.html index.htm;
             try_files $uri $uri/ /index.html;
         }
