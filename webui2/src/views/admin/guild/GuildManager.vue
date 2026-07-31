@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
 import Request from '../../../api/Request';
+import { gmOperations } from '../../../api/gmOperations';
+import { openPlayerInspector } from '../../../composables/usePlayerInspector';
 
 interface GuildRow {
   guildId: number;
@@ -18,6 +20,12 @@ interface GuildRow {
   minLevel: number;
   maxLevel: number;
   maxFund: number;
+  guildPoint?: number;
+  skillPoint?: number;
+  announcement?: string;
+  maxGuildExp?: number;
+  maxGuildPoint?: number;
+  maxSkillPoint?: number;
 }
 
 interface GuildMember {
@@ -90,17 +98,36 @@ const addingCharacNo = ref<number | null>(null);
 const settings = reactive({
   level: 1,
   fund: 0,
+  guildExp: 0,
+  guildPoint: 0,
   expectedLevel: 1,
-  expectedFund: 0
+  expectedFund: 0,
+  expectedGuildExp: 0,
+  expectedGuildPoint: 0,
 });
 const settingsSaving = ref(false);
+const applications = ref({ page: 1, pageSize: 20, totalSize: 0, list: [] as any[] });
+const applicationsLoading = ref(false);
+const applicationSaving = ref<number | null>(null);
+const skills = ref({ skillPoint: 0, list: [] as any[] });
+const skillsLoading = ref(false);
+const skillPointDelta = ref(0);
+const skillSaving = ref(false);
+const announcement = reactive({ content: '', expectedContent: '' });
+const announcementLoading = ref(false);
+const announcementSaving = ref(false);
+const contributions = ref({ page: 1, pageSize: 20, totalSize: 0, list: [] as any[] });
+const contributionLoading = ref(false);
+const contributionSaving = ref<number | null>(null);
+const contributionDrafts = reactive<Record<number, number>>({});
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 const formatNumber = (value: number | string | null | undefined) =>
   numberFormatter.format(Number(value || 0));
 
 const settingsChanged = computed(() =>
-  settings.level !== settings.expectedLevel || settings.fund !== settings.expectedFund
+  settings.level !== settings.expectedLevel || settings.fund !== settings.expectedFund ||
+  settings.guildExp !== settings.expectedGuildExp || settings.guildPoint !== settings.expectedGuildPoint
 );
 
 const buildGuildUrl = () => {
@@ -144,8 +171,12 @@ const resetGuildFilters = () => {
 const syncSettings = (guild: GuildRow) => {
   settings.level = Number(guild.level || 1);
   settings.fund = Number(guild.fund || 0);
+  settings.guildExp = Number(guild.guildExp || 0);
+  settings.guildPoint = Number(guild.guildPoint || 0);
   settings.expectedLevel = settings.level;
   settings.expectedFund = settings.fund;
+  settings.expectedGuildExp = settings.guildExp;
+  settings.expectedGuildPoint = settings.guildPoint;
 };
 
 const buildMemberUrl = (guildId: number) => {
@@ -249,9 +280,11 @@ const addGuildMember = (character: AvailableCharacter) => {
     onBeforeOk: async () => {
       addingCharacNo.value = character.characNo;
       try {
+        const requestId = operationRequestId();
         const response = await Request.post<any>(`/api/v1/gm/guilds/${guild.guildId}/members`, {
-          characNo: character.characNo
-        });
+          characNo: character.characNo,
+          requestId,
+        }, { headers: { requestId } });
         if (response.data?.guild) {
           selectedGuild.value = response.data.guild;
           if (!settingsChanged.value) syncSettings(response.data.guild);
@@ -281,6 +314,179 @@ const openManager = (guild: GuildRow) => {
   loadMembers(true);
 };
 
+const operationRequestId = () => globalThis.crypto?.randomUUID?.() || `guild-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const loadApplications = async () => {
+  if (!selectedGuild.value || applicationsLoading.value) return;
+  applicationsLoading.value = true;
+  try {
+    const response = await gmOperations.getGuildApplications(selectedGuild.value.guildId);
+    applications.value = { page: Number(response?.page || 1), pageSize: Number(response?.pageSize || 20), totalSize: Number(response?.totalSize || 0), list: response?.list || [] };
+  } catch (error: any) {
+    Request.showError(error, '入会申请读取失败');
+  } finally {
+    applicationsLoading.value = false;
+  }
+};
+
+const changeApplication = (row: any, action: 'approve' | 'reject') => {
+  const guild = selectedGuild.value;
+  if (!guild || applicationSaving.value !== null) return;
+  const characNo = Number(row.characNo);
+  Modal.confirm({
+    title: action === 'approve' ? '批准入会申请' : '拒绝入会申请',
+    content: `${action === 'approve' ? '批准' : '拒绝'}“${row.characName || row.name || row.characNo}”加入 ${guild.guildName}？`,
+    okText: action === 'approve' ? '批准' : '拒绝', cancelText: '取消', maskClosable: false, escToClose: false,
+    onBeforeOk: async () => {
+      applicationSaving.value = characNo;
+      try {
+        await gmOperations.changeGuildApplication(guild.guildId, characNo, action, { requestId: operationRequestId(), expectedStatus: row.status });
+        await Promise.all([loadApplications(), loadMembers(), loadGuilds()]);
+        Message.success(action === 'approve' ? '申请已批准' : '申请已拒绝');
+        return true;
+      } catch (error: any) {
+        Request.showError(error, '入会申请处理失败');
+        return false;
+      } finally {
+        applicationSaving.value = null;
+      }
+    },
+  });
+};
+
+const loadSkills = async () => {
+  if (!selectedGuild.value || skillsLoading.value) return;
+  skillsLoading.value = true;
+  try {
+    const response = await gmOperations.getGuildSkills(selectedGuild.value.guildId);
+    skills.value = { skillPoint: Number(response?.skillPoint ?? selectedGuild.value.skillPoint ?? 0), list: response?.list || [] };
+    skillPointDelta.value = 0;
+  } catch (error: any) {
+    Request.showError(error, '公会技能读取失败');
+  } finally {
+    skillsLoading.value = false;
+  }
+};
+
+const saveSkillPoints = () => {
+  const guild = selectedGuild.value;
+  const delta = Number(skillPointDelta.value || 0);
+  if (!guild || !delta || skillSaving.value) return;
+  Modal.confirm({
+    title: '调整公会技能点',
+    content: `${guild.guildName}：${skills.value.skillPoint} ${delta > 0 ? '+' : '-'} ${Math.abs(delta)}`,
+    okText: '确认调整', cancelText: '取消', maskClosable: false, escToClose: false,
+    onBeforeOk: async () => {
+      skillSaving.value = true;
+      try {
+        await gmOperations.changeGuildSkillPoints(guild.guildId, { delta, expectedSkillPoint: skills.value.skillPoint, requestId: operationRequestId() });
+        await Promise.all([loadSkills(), loadGuilds()]);
+        Message.success('公会技能点已更新');
+        return true;
+      } catch (error: any) {
+        Request.showError(error, '技能点调整失败');
+        return false;
+      } finally {
+        skillSaving.value = false;
+      }
+    },
+  });
+};
+
+const loadAnnouncement = async () => {
+  if (!selectedGuild.value || announcementLoading.value) return;
+  announcementLoading.value = true;
+  try {
+    const response = await gmOperations.getGuildAnnouncement(selectedGuild.value.guildId);
+    announcement.content = String(response?.notice ?? response?.content ?? response?.announcement ?? selectedGuild.value.announcement ?? '');
+    announcement.expectedContent = announcement.content;
+  } catch (error: any) {
+    Request.showError(error, '公会公告读取失败');
+  } finally {
+    announcementLoading.value = false;
+  }
+};
+
+const saveAnnouncement = () => {
+  const guild = selectedGuild.value;
+  if (!guild || announcement.content === announcement.expectedContent || announcementSaving.value) return;
+  Modal.confirm({
+    title: '更新公会公告', content: `确认保存 ${guild.guildName} 的新公告？`, okText: '保存公告', cancelText: '取消', maskClosable: false, escToClose: false,
+    onBeforeOk: async () => {
+      announcementSaving.value = true;
+      try {
+        await gmOperations.updateGuildAnnouncement(guild.guildId, { content: announcement.content, expectedContent: announcement.expectedContent, requestId: operationRequestId() });
+        announcement.expectedContent = announcement.content;
+        Message.success('公会公告已更新');
+        return true;
+      } catch (error: any) {
+        Request.showError(error, '公会公告保存失败');
+        return false;
+      } finally {
+        announcementSaving.value = false;
+      }
+    },
+  });
+};
+
+const loadContributions = async () => {
+  if (!selectedGuild.value || contributionLoading.value) return;
+  contributionLoading.value = true;
+  try {
+    const response = await gmOperations.getGuildContributions(selectedGuild.value.guildId, { page: contributions.value.page, pageSize: contributions.value.pageSize });
+    contributions.value = { page: Number(response?.page || 1), pageSize: Number(response?.pageSize || 20), totalSize: Number(response?.totalSize || 0), list: response?.list || [] };
+    Object.keys(contributionDrafts).forEach((key) => delete contributionDrafts[Number(key)]);
+  } catch (error: any) {
+    Request.showError(error, '贡献记录读取失败');
+  } finally {
+    contributionLoading.value = false;
+  }
+};
+
+const saveContribution = (row: any) => {
+  const guild = selectedGuild.value;
+  const characNo = Number(row.characNo);
+  const current = Number(row.memberPoint ?? row.contribution ?? 0);
+  const next = Number(contributionDrafts[characNo] ?? current);
+  if (!guild || next === current || contributionSaving.value !== null) return;
+  Modal.confirm({
+    title: '修改成员贡献', content: `${row.characName || characNo}：${formatNumber(current)} → ${formatNumber(next)}`, okText: '确认修改', cancelText: '取消', maskClosable: false, escToClose: false,
+    onBeforeOk: async () => {
+      contributionSaving.value = characNo;
+      try {
+        await gmOperations.changeGuildContribution(guild.guildId, characNo, { contribution: next, expectedContribution: current, requestId: operationRequestId() });
+        await Promise.all([loadContributions(), loadMembers()]);
+        Message.success('成员贡献已更新');
+        return true;
+      } catch (error: any) {
+        Request.showError(error, '成员贡献修改失败');
+        return false;
+      } finally {
+        contributionSaving.value = null;
+      }
+    },
+  });
+};
+
+const removeMember = (member: GuildMember) => {
+  const guild = selectedGuild.value;
+  if (!guild || member.leader) return;
+  Modal.confirm({
+    title: '移除公会成员', content: `确认将“${member.characName}”移出 ${guild.guildName}？`, okText: '确认移除', cancelText: '取消', okButtonProps: { status: 'danger' }, maskClosable: false, escToClose: false,
+    onBeforeOk: async () => {
+      try {
+        await gmOperations.removeGuildMember(guild.guildId, member.characNo, { expectedGrade: member.grade, requestId: operationRequestId() });
+        await Promise.all([loadMembers(), loadGuilds()]);
+        Message.success(`${member.characName} 已移出公会`);
+        return true;
+      } catch (error: any) {
+        Request.showError(error, '移除成员失败');
+        return false;
+      }
+    },
+  });
+};
+
 const updateGuildListRow = (guild: GuildRow) => {
   const index = guildResult.value.list.findIndex((item) => item.guildId === guild.guildId);
   if (index >= 0) guildResult.value.list[index] = { ...guildResult.value.list[index], ...guild };
@@ -301,12 +507,18 @@ const saveSettings = () => {
     onBeforeOk: async () => {
       settingsSaving.value = true;
       try {
+        const requestId = operationRequestId();
         const response = await Request.put<GuildRow>(`/api/v1/gm/guilds/${guild.guildId}`, {
           level: settings.level,
           fund: settings.fund,
+          guildExp: settings.guildExp,
+          guildPoint: settings.guildPoint,
           expectedLevel: settings.expectedLevel,
-          expectedFund: settings.expectedFund
-        });
+          expectedFund: settings.expectedFund,
+          expectedGuildExp: settings.expectedGuildExp,
+          expectedGuildPoint: settings.expectedGuildPoint,
+          requestId,
+        }, { headers: { requestId } });
         selectedGuild.value = response.data;
         syncSettings(response.data);
         updateGuildListRow(response.data);
@@ -339,9 +551,11 @@ const saveMemberGrade = (member: GuildMember) => {
     onBeforeOk: async () => {
       gradeSaving.value = member.characNo;
       try {
+        const requestId = operationRequestId();
         const response = await Request.put<GuildMember>(
           `/api/v1/gm/guilds/${member.guildId}/members/${member.characNo}/grade`,
-          { grade, expectedGrade: member.grade }
+          { grade, expectedGrade: member.grade, requestId },
+          { headers: { requestId } },
         );
         const index = memberResult.value.list.findIndex((item) => item.characNo === member.characNo);
         if (index >= 0) memberResult.value.list[index] = response.data;
@@ -394,6 +608,15 @@ const onCandidatePageSizeChange = (pageSize: number) => {
   candidateFilters.pageSize = pageSize;
   loadCandidates(true);
 };
+
+watch(activeTab, (tab) => {
+  if (!managerVisible.value || !selectedGuild.value) return;
+  if (tab === 'members') loadMembers();
+  if (tab === 'applications') loadApplications();
+  if (tab === 'skills') loadSkills();
+  if (tab === 'announcement') loadAnnouncement();
+  if (tab === 'contributions') loadContributions();
+});
 
 onMounted(() => loadGuilds());
 </script>
@@ -552,10 +775,10 @@ onMounted(() => loadGuilds());
               <template #columns>
                 <a-table-column title="角色" :width="210">
                   <template #cell="{ record }">
-                    <div class="member-cell">
+                    <button class="member-cell member-profile-link" type="button" @click="openPlayerInspector(record.characNo, 'guild', '公会成员')">
                       <span class="level-badge">LV.{{ record.level || 1 }}</span>
                       <div><strong class="member-name">{{ record.characName }}</strong><small>角色 ID {{ record.characNo }}</small></div>
-                    </div>
+                    </button>
                   </template>
                 </a-table-column>
                 <a-table-column title="账号 UID" :width="140">
@@ -589,19 +812,14 @@ onMounted(() => loadGuilds());
                 <a-table-column title="最后游戏" :width="165">
                   <template #cell="{ record }"><span class="member-time">{{ record.lastPlayTime || '--' }}</span></template>
                 </a-table-column>
-                <a-table-column title="操作" :width="82" fixed="right">
+                <a-table-column title="操作" :width="154" fixed="right">
                   <template #cell="{ record }">
-                    <a-tooltip v-if="record.canEditGrade" content="保存成员职级">
-                      <a-button
-                        type="primary"
-                        shape="circle"
-                        :aria-label="`保存 ${record.characName} 的成员职级`"
-                        :loading="gradeSaving === record.characNo"
-                        :disabled="gradeSaving !== null || draftGrade(record) === record.grade"
-                        @click="saveMemberGrade(record)"
-                      ><icon-save /></a-button>
-                    </a-tooltip>
-                    <span v-else class="locked-operation">--</span>
+                    <a-space size="mini">
+                      <a-tooltip content="查看玩家档案"><a-button shape="circle" @click="openPlayerInspector(record.characNo, 'guild', '公会成员')"><icon-eye /></a-button></a-tooltip>
+                      <a-tooltip v-if="record.canEditGrade" content="保存成员职级"><a-button type="primary" shape="circle" :aria-label="`保存 ${record.characName} 的成员职级`" :loading="gradeSaving === record.characNo" :disabled="gradeSaving !== null || draftGrade(record) === record.grade" @click="saveMemberGrade(record)"><icon-save /></a-button></a-tooltip>
+                      <a-tooltip v-if="!record.leader" content="移除成员"><a-button shape="circle" status="danger" @click="removeMember(record)"><icon-delete /></a-button></a-tooltip>
+                      <span v-else class="locked-operation"><icon-lock /></span>
+                    </a-space>
                   </template>
                 </a-table-column>
               </template>
@@ -650,6 +868,14 @@ onMounted(() => loadGuilds());
                   />
                   <template #extra>当前 {{ formatNumber(settings.expectedFund) }}，最大 4,294,967,295</template>
                 </a-form-item>
+                <a-form-item label="公会经验">
+                  <a-input-number v-model="settings.guildExp" :min="0" :max="selectedGuild.maxGuildExp || 4294967295" :precision="0" hide-button />
+                  <template #extra>当前 {{ formatNumber(settings.expectedGuildExp) }}</template>
+                </a-form-item>
+                <a-form-item label="公会点数">
+                  <a-input-number v-model="settings.guildPoint" :min="0" :max="selectedGuild.maxGuildPoint || 4294967295" :precision="0" hide-button />
+                  <template #extra>当前 {{ formatNumber(settings.expectedGuildPoint) }}</template>
+                </a-form-item>
               </div>
               <div class="settings-actions">
                 <a-button
@@ -663,6 +889,47 @@ onMounted(() => loadGuilds());
                 </a-button>
               </div>
             </a-form>
+          </a-tab-pane>
+
+          <a-tab-pane key="applications" title="入会申请">
+            <div class="member-toolbar"><div class="tab-copy"><strong>待处理申请</strong><span>批准后默认成员职级为优秀，重复申请会由服务端校验。</span></div><a-button :loading="applicationsLoading" @click="loadApplications"><template #icon><icon-refresh /></template>刷新</a-button></div>
+            <a-table :data="applications.list" :loading="applicationsLoading" :pagination="false" :scroll="{ x: 820 }">
+              <template #empty><a-empty description="暂无待处理入会申请" /></template>
+              <template #columns>
+                <a-table-column title="申请角色" :width="220"><template #cell="{ record }"><button class="member-profile-link simple" type="button" @click="openPlayerInspector(Number(record.characNo), 'profile', '公会申请')"><strong>{{ record.characName || record.name || '--' }}</strong><small>#{{ record.characNo || '--' }}</small></button></template></a-table-column>
+                <a-table-column title="账号 UID" :width="150"><template #cell="{ record }"><span class="member-uid">{{ record.uid || record.memberId || '--' }}</span></template></a-table-column>
+                <a-table-column title="申请时间" :width="190"><template #cell="{ record }">{{ record.applyTime || record.createdAt || '--' }}</template></a-table-column>
+                <a-table-column title="状态" :width="110"><template #cell="{ record }"><a-tag color="orange">{{ record.statusName || record.status || '待处理' }}</a-tag></template></a-table-column>
+                <a-table-column title="操作" :width="180" fixed="right"><template #cell="{ record }"><a-space><a-button size="small" type="primary" :loading="applicationSaving === Number(record.characNo)" @click="changeApplication(record, 'approve')">批准</a-button><a-button size="small" status="danger" :disabled="applicationSaving !== null" @click="changeApplication(record, 'reject')">拒绝</a-button></a-space></template></a-table-column>
+              </template>
+            </a-table>
+          </a-tab-pane>
+
+          <a-tab-pane key="skills" title="公会技能">
+            <a-spin :loading="skillsLoading" class="tab-loading">
+              <div class="skill-console"><div><span>可用技能点</span><strong>{{ formatNumber(skills.skillPoint) }}</strong><small>仅调整技能点，不直接编辑技能 Blob</small></div><div class="skill-adjust"><a-input-number v-model="skillPointDelta" :min="-65535" :max="65535" :precision="0" hide-button placeholder="增加或扣减" /><a-button type="primary" :loading="skillSaving" :disabled="!skillPointDelta" @click="saveSkillPoints"><template #icon><icon-swap /></template>调整技能点</a-button></div></div>
+              <a-table :data="skills.list" :pagination="false" :scroll="{ x: 680 }"><template #empty><a-empty description="当前仅提供公会技能点只读摘要，技能 Blob 明细尚未解析。" /></template><template #columns><a-table-column title="技能" :width="240"><template #cell="{ record }"><strong>{{ record.label || record.name || `技能 ${record.skillId || '--'}` }}</strong><small class="block-muted">{{ record.description || '' }}</small></template></a-table-column><a-table-column title="当前等级" :width="120"><template #cell="{ record }">LV.{{ record.level ?? '--' }}</template></a-table-column><a-table-column title="最高等级" :width="120"><template #cell="{ record }">LV.{{ record.maxLevel ?? '--' }}</template></a-table-column><a-table-column title="状态" :width="130"><template #cell="{ record }"><a-tag :color="record.available === false ? 'gray' : 'green'">{{ record.available === false ? '不可识别' : '只读' }}</a-tag></template></a-table-column></template></a-table>
+            </a-spin>
+          </a-tab-pane>
+
+          <a-tab-pane key="announcement" title="公会公告">
+            <a-spin :loading="announcementLoading" class="tab-loading">
+              <div class="announcement-editor"><div class="tab-copy"><strong>公会公告</strong><span>公告最多 200 个字符，保存后立即写入公会公告表。</span></div><a-textarea v-model="announcement.content" :max-length="200" show-word-limit :auto-size="{ minRows: 8, maxRows: 16 }" placeholder="输入公会公告" /><div class="settings-actions"><a-button type="primary" :loading="announcementSaving" :disabled="announcement.content === announcement.expectedContent" @click="saveAnnouncement"><template #icon><icon-save /></template>保存公告</a-button></div></div>
+            </a-spin>
+          </a-tab-pane>
+
+          <a-tab-pane key="contributions" title="贡献记录">
+            <div class="member-toolbar"><div class="tab-copy"><strong>成员贡献</strong><span>修改采用旧值校验并记录后台审计。</span></div><a-button :loading="contributionLoading" @click="loadContributions"><template #icon><icon-refresh /></template>刷新</a-button></div>
+            <a-table :data="contributions.list" :loading="contributionLoading" :pagination="false" :scroll="{ x: 820 }">
+              <template #empty><a-empty description="暂无贡献记录" /></template>
+              <template #columns>
+                <a-table-column title="角色" :width="220"><template #cell="{ record }"><button class="member-profile-link simple" type="button" @click="openPlayerInspector(Number(record.characNo), 'guild', '公会贡献')"><strong>{{ record.characName || '--' }}</strong><small>#{{ record.characNo }}</small></button></template></a-table-column>
+                <a-table-column title="当前贡献" :width="150"><template #cell="{ record }"><span class="member-point">{{ formatNumber(record.memberPoint ?? record.contribution) }}</span></template></a-table-column>
+                <a-table-column title="修改为" :width="200"><template #cell="{ record }"><a-input-number :model-value="contributionDrafts[record.characNo] ?? Number(record.memberPoint ?? record.contribution ?? 0)" :min="0" :max="4294967295" hide-button @change="(value) => contributionDrafts[record.characNo] = Number(value)" /></template></a-table-column>
+                <a-table-column title="最后游戏" :width="190"><template #cell="{ record }">{{ record.lastPlayTime || record.lastContributionAt || record.updatedAt || '--' }}</template></a-table-column>
+                <a-table-column title="操作" :width="90" fixed="right"><template #cell="{ record }"><a-tooltip content="保存成员贡献"><a-button type="primary" shape="circle" :loading="contributionSaving === record.characNo" :disabled="contributionSaving !== null || Number(contributionDrafts[record.characNo] ?? record.memberPoint ?? record.contribution ?? 0) === Number(record.memberPoint ?? record.contribution ?? 0)" @click="saveContribution(record)"><icon-save /></a-button></a-tooltip></template></a-table-column>
+              </template>
+            </a-table>
           </a-tab-pane>
         </a-tabs>
       </template>
@@ -819,6 +1086,40 @@ onMounted(() => loadGuilds());
   font-size: 15px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.member-profile-link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.member-profile-link:hover .member-name,
+.member-profile-link:hover strong {
+  color: var(--gm-cyan);
+}
+
+.member-profile-link.simple {
+  display: block;
+  width: 100%;
+}
+
+.member-profile-link.simple strong,
+.member-profile-link.simple small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-profile-link.simple small {
+  margin-top: 3px;
+  color: var(--gm-muted);
+  font-size: 10px;
 }
 
 .member-uid {
@@ -1050,6 +1351,80 @@ onMounted(() => loadGuilds());
   border-top: 1px solid var(--gm-rule);
 }
 
+.tab-copy {
+  min-width: 0;
+}
+
+.tab-copy strong,
+.tab-copy span {
+  display: block;
+}
+
+.tab-copy strong {
+  color: var(--gm-text);
+  font-size: 14px;
+}
+
+.tab-copy span {
+  margin-top: 4px;
+  color: var(--gm-muted);
+  font-size: 11px;
+}
+
+.tab-loading {
+  display: block;
+  min-height: 260px;
+}
+
+.skill-console {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(300px, auto);
+  align-items: end;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--gm-rule);
+  border-left: 3px solid var(--gm-amber);
+  border-radius: 6px;
+  background: rgba(8, 13, 22, .28);
+}
+
+.skill-console span,
+.skill-console strong,
+.skill-console small {
+  display: block;
+}
+
+.skill-console span,
+.skill-console small {
+  color: var(--gm-muted);
+  font-size: 11px;
+}
+
+.skill-console strong {
+  margin: 6px 0;
+  color: var(--gm-amber);
+  font: 750 23px/1 ui-monospace, Consolas, monospace;
+}
+
+.skill-adjust {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 8px;
+}
+
+.announcement-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.block-muted {
+  display: block;
+  margin-top: 4px;
+  color: var(--gm-muted);
+  font-size: 10px;
+}
+
 :global(.guild-theme-modal.arco-modal) {
   --guild-modal-surface: #101a2a;
   --guild-modal-raised: #16243a;
@@ -1232,6 +1607,10 @@ onMounted(() => loadGuilds());
     width: 100%;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .skill-console {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 560px) {
@@ -1259,6 +1638,14 @@ onMounted(() => loadGuilds());
   .candidate-toolbar {
     align-items: stretch;
     flex-direction: column;
+    width: 100%;
+  }
+
+  .skill-adjust {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skill-adjust .arco-btn {
     width: 100%;
   }
 

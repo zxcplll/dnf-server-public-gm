@@ -2,6 +2,7 @@
 
 import {nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import RecursiveMenuItem from "../../components/RecursiveMenuItem.vue";
+import PlayerInspector from "../../components/admin/player/PlayerInspector.vue";
 import router from "../../router";
 import {ApiGlobalConfig} from "../../api/ApiGlobalConfig.ts";
 import Request from "../../api/Request.ts";
@@ -56,6 +57,10 @@ menus.value = [
       {
         path: 'roles',
         meta: { title: '角色管理', icon: 'home' },
+      },
+      {
+        path: 'online',
+        meta: { title: '实时在线', icon: 'online' },
       }
     ]
   },
@@ -66,6 +71,10 @@ menus.value = [
   {
     path: '/monitor',
     meta: { title: '服务器监控', icon: 'dashboard' }
+  },
+  {
+    path: '/analytics',
+    meta: { title: '运营统计', icon: 'analytics' }
   },
   {
     path: '/reward',
@@ -362,6 +371,7 @@ Request.get('api/v1/account?page=1&pageSize=1')
 <!--      </a-layout-footer>-->
     </a-layout>
   </a-layout>
+  <PlayerInspector />
 </div>
 </template>
 

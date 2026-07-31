@@ -20,6 +20,8 @@ const props = defineProps({
   <icon-book v-else-if="props.iconName === 'dist'"/>
   <icon-align-left v-else-if="props.iconName.includes('log')"/>
   <icon-dashboard v-else-if="props.iconName === 'dashboard'"/>
+  <icon-user-group v-else-if="props.iconName === 'online'"/>
+  <icon-bar-chart v-else-if="props.iconName === 'analytics'"/>
   <span v-else-if="props.iconName === '#' || !props.iconName"></span>
   <icon-command v-else/>
 </template>

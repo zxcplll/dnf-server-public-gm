@@ -34,8 +34,10 @@
   --gm-z-header: 100;
   --gm-z-tabs: 90;
   --gm-z-drawer: 400;
-  --gm-z-inspector: 800;
-  --gm-z-hover: 1100;
+  --gm-z-modal: 1000;
+  --gm-z-inspector: 1200;
+  --gm-z-popover: 1350;
+  --gm-z-hover: 1400;
   color: var(--gm-text);
   background: var(--gm-bg);
 }
@@ -199,6 +201,24 @@
   color: var(--gm-blue);
 }
 
+.admin-page .arco-radio-button {
+  border-color: var(--gm-rule-strong);
+  color: var(--gm-muted);
+  background: var(--gm-surface-raised);
+}
+
+.admin-page .arco-radio-button:hover {
+  color: var(--gm-cyan);
+  border-color: rgba(77, 228, 210, 0.65);
+  background: var(--gm-cyan-soft);
+}
+
+.admin-page .arco-radio-button.arco-radio-checked {
+  color: var(--gm-cyan);
+  border-color: var(--gm-cyan);
+  background: var(--gm-cyan-soft);
+}
+
 .admin-page .arco-alert {
   border-color: rgba(255, 188, 104, 0.3);
   background: var(--gm-amber-soft);
@@ -255,6 +275,14 @@
 .admin-page .arco-modal-title,
 .admin-page .arco-drawer-title {
   color: var(--gm-text);
+}
+
+.admin-page .inspector-tabs .arco-tabs-nav-tab-list {
+  min-width: max-content;
+}
+
+.admin-page .inspector-tabs .arco-tabs-nav::before {
+  background: var(--gm-rule);
 }
 
 .admin-page .arco-scrollbar-track-direction-vertical .arco-scrollbar-thumb-bar {

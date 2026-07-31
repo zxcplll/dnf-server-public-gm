@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { Message, Modal } from '@arco-design/web-vue';
 import Request from '../../../api/Request';
+import { openPlayerInspector } from '../../../composables/usePlayerInspector';
 
 interface CharacterRow {
   characNo: number;
@@ -171,10 +172,10 @@ onMounted(() => loadCharacters());
           <a-table-column title="角色 ID" data-index="characNo" :width="78" />
           <a-table-column title="角色名称" :width="200">
             <template #cell="{ record }">
-              <div class="character-cell">
+              <button class="character-cell character-profile-link" type="button" @click="openPlayerInspector(Number(record.characNo), 'mail', '玩家邮件管理')">
                 <span class="level-badge">LV.{{ record.lev || 1 }}</span>
                 <strong>{{ record.characName }}</strong>
-              </div>
+              </button>
             </template>
           </a-table-column>
           <a-table-column title="所属账号" :width="180">
@@ -286,6 +287,27 @@ onMounted(() => loadCharacters());
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+.character-profile-link {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+
+  &:hover strong,
+  &:focus-visible strong {
+    color: var(--gm-cyan);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(77, 228, 210, .7);
+    outline-offset: 3px;
   }
 }
 

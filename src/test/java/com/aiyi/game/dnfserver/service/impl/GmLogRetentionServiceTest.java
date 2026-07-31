@@ -27,7 +27,7 @@ public class GmLogRetentionServiceTest {
         service.cleanupExpiredLogs();
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbcTemplate, times(4)).update(sql.capture());
+        verify(jdbcTemplate, times(5)).update(sql.capture());
         List<String> statements = sql.getAllValues();
         assertEquals("DELETE FROM dnf_service.gm_online_reward_log " +
                 "WHERE awarded_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 5000", statements.get(0));
@@ -37,6 +37,8 @@ public class GmLogRetentionServiceTest {
                 "WHERE status='FAILED' AND created_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 5000", statements.get(2));
         assertEquals("DELETE FROM d_guild.guild_grade_log " +
                 "WHERE occ_time < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 5000", statements.get(3));
+        assertEquals("DELETE FROM dnf_service.gm_operation_audit " +
+                "WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY) LIMIT 5000", statements.get(4));
     }
 
     @Test
@@ -55,9 +57,10 @@ public class GmLogRetentionServiceTest {
         service.cleanupExpiredLogs();
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbcTemplate, times(4)).update(sql.capture());
+        verify(jdbcTemplate, times(5)).update(sql.capture());
         assertTrue(sql.getAllValues().get(2).contains("gm_backup_entry"));
         assertTrue(sql.getAllValues().get(3).contains("d_guild.guild_grade_log"));
+        assertTrue(sql.getAllValues().get(4).contains("gm_operation_audit"));
     }
 
     @Test

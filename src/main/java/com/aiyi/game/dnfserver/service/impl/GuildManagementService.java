@@ -5,6 +5,7 @@ import com.aiyi.core.util.thread.ThreadUtil;
 import com.aiyi.game.dnfserver.dao.AccountVODao;
 import com.aiyi.game.dnfserver.entity.AccountVO;
 import com.aiyi.game.dnfserver.utils.ChinaseUtil;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,9 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class GuildManagementService {
@@ -22,6 +25,9 @@ public class GuildManagementService {
     public static final int MIN_GUILD_LEVEL = 1;
     public static final int MAX_GUILD_LEVEL = 30;
     public static final long MAX_GUILD_FUND = 4294967295L;
+    public static final long MAX_UNSIGNED_INT = 4294967295L;
+    private static final List<String> GUILD_SETTINGS_COLUMNS = Arrays.asList(
+            "lev", "guild_exp", "guild_point", "guild_fund");
 
     @Resource
     private JdbcTemplate jdbcTemplate;
@@ -57,7 +63,7 @@ public class GuildManagementService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 "SELECT gi.guild_id AS guildId,gi.server_id AS serverId,gi.guild_name AS guildName," +
                         "gi.master_id AS masterId,gi.master_no AS masterNo,gi.master_name AS masterName," +
-                        "gi.lev AS level,gi.guild_exp AS guildExp,gi.guild_fund AS fund," +
+                        "gi.lev AS level,gi.guild_exp AS guildExp,gi.guild_point AS guildPoint,gi.guild_fund AS fund," +
                         "gi.member_count AS memberCount,gi.create_time AS createTime," +
                         "gi.expire_flag AS expireFlag FROM d_guild.guild_info gi" + where +
                         " ORDER BY gi.guild_id DESC LIMIT ? OFFSET ?",
@@ -75,6 +81,8 @@ public class GuildManagementService {
         result.put("minLevel", MIN_GUILD_LEVEL);
         result.put("maxLevel", MAX_GUILD_LEVEL);
         result.put("maxFund", MAX_GUILD_FUND);
+        result.put("maxGuildExp", MAX_UNSIGNED_INT);
+        result.put("maxGuildPoint", MAX_UNSIGNED_INT);
         return result;
     }
 
@@ -309,16 +317,253 @@ public class GuildManagementService {
         return result;
     }
 
+    public Map<String, Object> listApplications(int guildId, int page, int pageSize) {
+        requireAdmin();
+        Map<String, Object> guild = mapGuild(requireGuild(guildId, false));
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, Math.min(100, pageSize));
+        int offset = (safePage - 1) * safePageSize;
+        Number total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM d_guild.guild_join_list gj WHERE gj.guild_id=?",
+                new Object[]{guildId},
+                Number.class);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT gj.guild_id AS guildId,gj.m_id AS memberId,gj.charac_no AS characNo," +
+                        "c.charac_name AS characName,a.accountname,c.lev AS level,c.job," +
+                        "c.grow_type AS growType,gj.memo,gj.occ_time AS applyTime " +
+                        "FROM d_guild.guild_join_list gj " +
+                        "LEFT JOIN taiwan_cain.charac_info c ON c.charac_no=gj.charac_no " +
+                        "LEFT JOIN d_taiwan.accounts a ON a.UID=gj.m_id " +
+                        "WHERE gj.guild_id=? ORDER BY gj.occ_time,gj.charac_no LIMIT ? OFFSET ?",
+                guildId,
+                safePageSize,
+                offset);
+        List<Map<String, Object>> applications = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> application = new LinkedHashMap<>();
+            application.put("guildId", intValue(row.get("guildId"), guildId));
+            application.put("memberId", longValue(row.get("memberId"), 0));
+            application.put("characNo", intValue(row.get("characNo"), 0));
+            application.put("characName", ChinaseUtil.toSimple(stringValue(row.get("characName"), "")));
+            application.put("accountname", stringValue(row.get("accountname"), ""));
+            application.put("level", intValue(row.get("level"), 0));
+            application.put("job", intValue(row.get("job"), 0));
+            application.put("growType", intValue(row.get("growType"), 0));
+            application.put("memo", ChinaseUtil.toSimple(stringValue(row.get("memo"), "")));
+            application.put("applyTime", row.get("applyTime"));
+            applications.add(application);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("guild", guild);
+        result.put("page", safePage);
+        result.put("pageSize", safePageSize);
+        result.put("totalSize", total == null ? 0 : total.intValue());
+        result.put("list", applications);
+        return result;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> approveApplication(int guildId, int characNo) {
+        requireAdmin();
+        List<Map<String, Object>> applications = jdbcTemplate.queryForList(
+                "SELECT guild_id AS guildId,charac_no AS characNo FROM d_guild.guild_join_list " +
+                        "WHERE guild_id=? AND charac_no=? FOR UPDATE",
+                guildId,
+                characNo);
+        if (applications.isEmpty()) {
+            throw new ValidationException("入会申请不存在或已处理");
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("characNo", characNo);
+        return addMember(guildId, payload);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> rejectApplication(int guildId, int characNo) {
+        requireAdmin();
+        int deleted = jdbcTemplate.update(
+                "DELETE FROM d_guild.guild_join_list WHERE guild_id=? AND charac_no=?",
+                guildId,
+                characNo);
+        if (deleted != 1) {
+            throw new ValidationException("入会申请不存在或已处理");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("guildId", guildId);
+        result.put("characNo", characNo);
+        result.put("status", "rejected");
+        return result;
+    }
+
+    public Map<String, Object> getAnnouncement(int guildId) {
+        requireAdmin();
+        requireGuild(guildId, false);
+        return readAnnouncement(guildId);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> updateAnnouncement(int guildId, Map<String, Object> payload) {
+        requireAdmin();
+        requireGuild(guildId, true);
+        String notice = payload == null ? "" : stringValue(payload.get("notice"), "").trim();
+        if (notice.length() > 200) {
+            throw new ValidationException("公会公告最多 200 个字符");
+        }
+        readAnnouncement(guildId);
+        int updated = jdbcTemplate.update(
+                "INSERT INTO d_guild.guild_notice (guild_id,notice,acc_date) VALUES (?,?,UNIX_TIMESTAMP()) " +
+                        "ON DUPLICATE KEY UPDATE notice=VALUES(notice),acc_date=UNIX_TIMESTAMP()",
+                guildId,
+                ChinaseUtil.toTraditional(notice));
+        if (updated < 1) {
+            throw new ValidationException("公会公告保存失败");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("guildId", guildId);
+        result.put("notice", notice);
+        result.put("updatedAt", System.currentTimeMillis());
+        return result;
+    }
+
+    public Map<String, Object> getSkills(int guildId) {
+        requireAdmin();
+        requireGuild(guildId, false);
+        return readSkills(guildId);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> updateSkillPoints(int guildId, Map<String, Object> payload) {
+        requireAdmin();
+        requireGuild(guildId, true);
+        if (payload == null || !payload.containsKey("remainSp") ||
+                !payload.containsKey("expectedRemainSp")) {
+            throw new ValidationException("公会技能点参数不完整");
+        }
+        long remainSp = longValue(payload.get("remainSp"), -1);
+        long expectedRemainSp = longValue(payload.get("expectedRemainSp"), -1);
+        if (remainSp < 0 || remainSp > MAX_UNSIGNED_INT) {
+            throw new ValidationException("剩余技能点超出允许范围");
+        }
+        Map<String, Object> current = readSkills(guildId);
+        long currentRemainSp = longValue(current.get("remainSp"), 0);
+        if (currentRemainSp != expectedRemainSp) {
+            throw new ValidationException("公会技能点已被其他人修改，请刷新后重试");
+        }
+        if (currentRemainSp != remainSp) {
+            int updated = jdbcTemplate.update(
+                    "UPDATE d_guild.guild_skill SET remain_sp=? WHERE guild_id=? AND remain_sp=?",
+                    remainSp,
+                    guildId,
+                    currentRemainSp);
+            if (updated != 1) {
+                throw new ValidationException("公会技能点保存失败，请刷新后重试");
+            }
+        }
+        current.put("remainSp", remainSp);
+        return current;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> updateMemberContribution(int guildId, int characNo,
+                                                         Map<String, Object> payload) {
+        requireAdmin();
+        if (payload == null || !payload.containsKey("memberPoint") ||
+                !payload.containsKey("expectedMemberPoint")) {
+            throw new ValidationException("成员贡献参数不完整");
+        }
+        long memberPoint = longValue(payload.get("memberPoint"), -1);
+        long expectedMemberPoint = longValue(payload.get("expectedMemberPoint"), -1);
+        if (memberPoint < 0 || memberPoint > MAX_UNSIGNED_INT) {
+            throw new ValidationException("成员贡献超出允许范围");
+        }
+        Map<String, Object> guild = requireGuild(guildId, true);
+        Map<String, Object> member = requireMember(guildId, characNo, true);
+        long current = longValue(member.get("memberPoint"), 0);
+        if (current != expectedMemberPoint) {
+            throw new ValidationException("成员贡献已被其他人修改，请刷新后重试");
+        }
+        if (current != memberPoint) {
+            int updated = jdbcTemplate.update(
+                    "UPDATE d_guild.guild_member SET member_point=? " +
+                            "WHERE guild_id=? AND charac_no=? AND member_point=? " +
+                            "AND member_flag=1 AND secede_type=0",
+                    memberPoint,
+                    guildId,
+                    characNo,
+                    current);
+            if (updated != 1) {
+                throw new ValidationException("成员贡献保存失败，请刷新后重试");
+            }
+        }
+        member.put("memberPoint", memberPoint);
+        return mapMember(member, intValue(guild.get("masterNo"), 0));
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> removeMember(int guildId, int characNo) {
+        requireAdmin();
+        Map<String, Object> guild = requireGuild(guildId, true);
+        Map<String, Object> member = requireMember(guildId, characNo, true);
+        int grade = intValue(member.get("grade"), 0);
+        if (characNo == intValue(guild.get("masterNo"), 0) || grade == 1) {
+            throw new ValidationException("会长不可移除");
+        }
+        int memberUpdated = jdbcTemplate.update(
+                "UPDATE d_guild.guild_member SET member_flag=0,secede_type=1,secede_time=NOW() " +
+                        "WHERE guild_id=? AND charac_no=? AND member_flag=1 AND secede_type=0",
+                guildId,
+                characNo);
+        if (memberUpdated != 1) {
+            throw new ValidationException("成员状态已变化，请刷新后重试");
+        }
+        int characterUpdated = jdbcTemplate.update(
+                "UPDATE taiwan_cain.charac_info SET guild_id=0,guild_right=0,guild_secede=UNIX_TIMESTAMP() " +
+                        "WHERE charac_no=? AND guild_id=?",
+                characNo,
+                guildId);
+        if (characterUpdated != 1) {
+            throw new ValidationException("角色公会状态同步失败");
+        }
+        int guildUpdated = jdbcTemplate.update(
+                "UPDATE d_guild.guild_info SET member_count=GREATEST(member_count-1,0) WHERE guild_id=?",
+                guildId);
+        if (guildUpdated != 1) {
+            throw new ValidationException("公会成员数更新失败");
+        }
+        jdbcTemplate.update(
+                "DELETE FROM d_guild.guild_join_list WHERE guild_id=? AND charac_no=?",
+                guildId,
+                characNo);
+        jdbcTemplate.update(
+                "UPDATE d_guild.guild_search SET member_count=" +
+                        "(SELECT gi.member_count FROM d_guild.guild_info gi WHERE gi.guild_id=?) " +
+                        "WHERE guild_id=?",
+                guildId,
+                guildId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("guildId", guildId);
+        result.put("characNo", characNo);
+        result.put("characName", ChinaseUtil.toSimple(stringValue(member.get("characName"), "")));
+        result.put("status", "removed");
+        return result;
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> updateGuild(int guildId, Map<String, Object> payload) {
         requireAdmin();
-        if (payload == null || !payload.containsKey("level") || !payload.containsKey("fund") ||
-                !payload.containsKey("expectedLevel") || !payload.containsKey("expectedFund")) {
+        if (payload == null || !payload.containsKey("level") || !payload.containsKey("guildExp") ||
+                !payload.containsKey("guildPoint") || !payload.containsKey("fund") ||
+                !payload.containsKey("expectedLevel") || !payload.containsKey("expectedGuildExp") ||
+                !payload.containsKey("expectedGuildPoint") || !payload.containsKey("expectedFund")) {
             throw new ValidationException("公会设置参数不完整");
         }
         int level = intValue(payload.get("level"), -1);
+        long guildExp = longValue(payload.get("guildExp"), -1);
+        long guildPoint = longValue(payload.get("guildPoint"), -1);
         long fund = longValue(payload.get("fund"), -1);
         int expectedLevel = intValue(payload.get("expectedLevel"), -1);
+        long expectedGuildExp = longValue(payload.get("expectedGuildExp"), -1);
+        long expectedGuildPoint = longValue(payload.get("expectedGuildPoint"), -1);
         long expectedFund = longValue(payload.get("expectedFund"), -1);
         if (level < MIN_GUILD_LEVEL || level > MAX_GUILD_LEVEL) {
             throw new ValidationException("公会等级只能设置为 1 到 30");
@@ -326,20 +571,33 @@ public class GuildManagementService {
         if (fund < 0 || fund > MAX_GUILD_FUND) {
             throw new ValidationException("公会资金必须在 0 到 4294967295 之间");
         }
+        if (guildExp < 0 || guildExp > MAX_UNSIGNED_INT) {
+            throw new ValidationException("公会经验必须在 0 到 4294967295 之间");
+        }
+        if (guildPoint < 0 || guildPoint > MAX_UNSIGNED_INT) {
+            throw new ValidationException("公会点数必须在 0 到 4294967295 之间");
+        }
 
+        validateGuildSettingsSchema();
         Map<String, Object> row = requireGuild(guildId, true);
         int currentLevel = intValue(row.get("level"), 0);
+        long currentGuildExp = longValue(row.get("guildExp"), 0);
+        long currentGuildPoint = longValue(row.get("guildPoint"), 0);
         long currentFund = longValue(row.get("fund"), 0);
-        if (currentLevel != expectedLevel || currentFund != expectedFund) {
+        if (currentLevel != expectedLevel || currentGuildExp != expectedGuildExp ||
+                currentGuildPoint != expectedGuildPoint || currentFund != expectedFund) {
             throw new ValidationException("公会设置已被其他人修改，请刷新后重试");
         }
-        if (currentLevel != level || currentFund != fund) {
+        if (currentLevel != level || currentGuildExp != guildExp ||
+                currentGuildPoint != guildPoint || currentFund != fund) {
             int updated = jdbcTemplate.update(
                     "UPDATE d_guild.guild_info SET " +
                             "lev_up_time=CASE WHEN lev<>? THEN NOW() ELSE lev_up_time END," +
-                            "lev=?,guild_fund=? WHERE guild_id=?",
+                            "lev=?,guild_exp=?,guild_point=?,guild_fund=? WHERE guild_id=?",
                     level,
                     level,
+                    guildExp,
+                    guildPoint,
                     fund,
                     guildId);
             if (updated != 1) {
@@ -353,6 +611,8 @@ public class GuildManagementService {
             }
         }
         row.put("level", level);
+        row.put("guildExp", guildExp);
+        row.put("guildPoint", guildPoint);
         row.put("fund", fund);
         return mapGuild(row);
     }
@@ -426,7 +686,8 @@ public class GuildManagementService {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 "SELECT gi.guild_id AS guildId,gi.server_id AS serverId,gi.guild_name AS guildName," +
                         "gi.master_id AS masterId,gi.master_no AS masterNo,gi.master_name AS masterName," +
-                        "gi.lev AS level,gi.guild_exp AS guildExp,gi.guild_fund AS fund," +
+                        "gi.lev AS level,gi.guild_exp AS guildExp,gi.guild_point AS guildPoint," +
+                        "gi.guild_fund AS fund," +
                         "gi.member_count AS memberCount,gi.create_time AS createTime," +
                         "gi.expire_flag AS expireFlag FROM d_guild.guild_info gi WHERE gi.guild_id=?" +
                         (forUpdate ? " FOR UPDATE" : ""),
@@ -435,6 +696,90 @@ public class GuildManagementService {
             throw new ValidationException("公会不存在");
         }
         return new LinkedHashMap<>(rows.get(0));
+    }
+
+    private void validateGuildSettingsSchema() {
+        Set<String> available = new HashSet<>();
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    "SELECT COLUMN_NAME AS columnName FROM information_schema.COLUMNS " +
+                            "WHERE TABLE_SCHEMA='d_guild' AND TABLE_NAME='guild_info' " +
+                            "AND COLUMN_NAME IN ('lev','guild_exp','guild_point','guild_fund')");
+            for (Map<String, Object> row : rows) {
+                String column = stringValue(row.get("columnName"), "").toLowerCase();
+                if (!column.isEmpty()) {
+                    available.add(column);
+                }
+            }
+        } catch (DataAccessException exception) {
+            throw new ValidationException("公会设置表结构校验失败");
+        }
+        List<String> missing = new ArrayList<>();
+        for (String column : GUILD_SETTINGS_COLUMNS) {
+            if (!available.contains(column)) {
+                missing.add(column);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new ValidationException("公会设置表缺少字段: " + String.join(",", missing));
+        }
+    }
+
+    private Map<String, Object> requireMember(int guildId, int characNo, boolean forUpdate) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT gm.guild_id AS guildId,gm.m_id AS memberId,gm.server_id AS serverId," +
+                        "gm.charac_no AS characNo,gm.charac_name AS characName,gm.grade," +
+                        "gm.lev AS level,gm.member_point AS memberPoint,gm.member_time AS memberTime," +
+                        "gm.last_play_time AS lastPlayTime FROM d_guild.guild_member gm " +
+                        "WHERE gm.guild_id=? AND gm.charac_no=? AND gm.member_flag=1 AND gm.secede_type=0" +
+                        (forUpdate ? " FOR UPDATE" : ""),
+                guildId,
+                characNo);
+        if (rows.isEmpty()) {
+            throw new ValidationException("公会成员不存在");
+        }
+        return new LinkedHashMap<>(rows.get(0));
+    }
+
+    private Map<String, Object> readAnnouncement(int guildId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT guild_id AS guildId,notice,acc_date AS updatedAt " +
+                        "FROM d_guild.guild_notice WHERE guild_id=?",
+                guildId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("guildId", guildId);
+        if (rows.isEmpty()) {
+            result.put("notice", "");
+            result.put("updatedAt", null);
+        } else {
+            Map<String, Object> row = rows.get(0);
+            result.put("notice", ChinaseUtil.toSimple(stringValue(row.get("notice"), "")));
+            result.put("updatedAt", row.get("updatedAt"));
+        }
+        return result;
+    }
+
+    private Map<String, Object> readSkills(int guildId) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT remain_sp AS remainSp,used_sp AS usedSp,OCTET_LENGTH(skill_slot) AS skillSlotSize " +
+                        "FROM d_guild.guild_skill WHERE guild_id=?",
+                guildId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("guildId", guildId);
+        if (rows.isEmpty()) {
+            result.put("remainSp", 0L);
+            result.put("usedSp", 0L);
+            result.put("skillSlotSize", 0);
+            result.put("available", false);
+        } else {
+            Map<String, Object> row = rows.get(0);
+            result.put("remainSp", longValue(row.get("remainSp"), 0));
+            result.put("usedSp", longValue(row.get("usedSp"), 0));
+            result.put("skillSlotSize", intValue(row.get("skillSlotSize"), 0));
+            result.put("available", true);
+        }
+        result.put("skillBlobReadOnly", true);
+        return result;
     }
 
     private AccountVO requireAdmin() {
@@ -456,6 +801,7 @@ public class GuildManagementService {
         result.put("masterName", ChinaseUtil.toSimple(stringValue(row.get("masterName"), "")));
         result.put("level", intValue(row.get("level"), 0));
         result.put("guildExp", longValue(row.get("guildExp"), 0));
+        result.put("guildPoint", longValue(row.get("guildPoint"), 0));
         result.put("fund", longValue(row.get("fund"), 0));
         result.put("memberCount", intValue(row.get("memberCount"), 0));
         result.put("createTime", row.get("createTime"));
@@ -463,6 +809,8 @@ public class GuildManagementService {
         result.put("minLevel", MIN_GUILD_LEVEL);
         result.put("maxLevel", MAX_GUILD_LEVEL);
         result.put("maxFund", MAX_GUILD_FUND);
+        result.put("maxGuildExp", MAX_UNSIGNED_INT);
+        result.put("maxGuildPoint", MAX_UNSIGNED_INT);
         return result;
     }
 

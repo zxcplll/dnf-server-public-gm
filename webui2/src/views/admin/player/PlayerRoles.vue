@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import {onMounted, ref, reactive} from "vue";
+import {onBeforeUnmount, onMounted, ref, reactive} from "vue";
 import {Message, Modal} from "@arco-design/web-vue";
 import Request from "../../../api/Request";
 import ItemPicker from "../../../components/ItemPicker.vue";
+import { openPlayerInspector } from "../../../composables/usePlayerInspector";
 
 const loading = ref(false);
 
@@ -304,12 +305,16 @@ const overTasks = (characNo: number) => {
 	});
 };
 
+const updateWindowHeight = () => {
+	windowHeight.value = window.innerHeight - 250;
+};
+
 onMounted(() => {
-	window.addEventListener("resize", () => {
-		windowHeight.value = window.innerHeight - 250;
-	});
+	updateWindowHeight();
+	window.addEventListener("resize", updateWindowHeight);
 	search();
 });
+onBeforeUnmount(() => window.removeEventListener("resize", updateWindowHeight));
 </script>
 
 <template>
@@ -376,6 +381,7 @@ onMounted(() => {
 								操作
 							</a-button>
 							<template #content>
+								<a-doption @click="openPlayerInspector(record.characNo, 'profile', '角色管理')">玩家档案</a-doption>
 								<a-doption @click="openEdit(record)">编辑/详情</a-doption>
 									<a-doption @click="openSendMail(record)">发送邮件</a-doption>
 								<a-doption @click="overTasks(record.characNo)">完成任务</a-doption>

@@ -61,11 +61,27 @@ public class GuildManagementServiceTest {
         row.put("masterName", "Leader");
         row.put("level", 30);
         row.put("guildExp", 54L);
+        row.put("guildPoint", 77L);
         row.put("fund", 403831200L);
         row.put("memberCount", 3);
         row.put("createTime", "2026-07-29 01:59:46");
         row.put("expireFlag", 0);
         return row;
+    }
+
+    private List<Map<String, Object>> guildSettingsSchema(String... columns) {
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (String column : columns) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("columnName", column);
+            result.add(row);
+        }
+        return result;
+    }
+
+    private void stubGuildSettingsSchema(JdbcTemplate jdbcTemplate) {
+        when(jdbcTemplate.queryForList(contains("information_schema.COLUMNS")))
+                .thenReturn(guildSettingsSchema("lev", "guild_exp", "guild_point", "guild_fund"));
     }
 
     private Map<String, Object> availableCharacterRow() {
@@ -124,31 +140,39 @@ public class GuildManagementServiceTest {
     }
 
     @Test
-    public void updatesGuildLevelAndFundWithExpectedValues() {
+    public void updatesGuildLevelExperiencePointAndFundWithExpectedValues() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         GuildManagementService service = service(jdbcTemplate, true);
+        stubGuildSettingsSchema(jdbcTemplate);
         when(jdbcTemplate.queryForList(contains("FOR UPDATE"), eq(1)))
                 .thenReturn(Collections.singletonList(guildRow()));
         when(jdbcTemplate.update(contains("UPDATE d_guild.guild_info"),
-                eq(20), eq(20), eq(123456L), eq(1)))
+                eq(20), eq(20), eq(100L), eq(25L), eq(123456L), eq(1)))
                 .thenReturn(1);
         when(jdbcTemplate.update(contains("UPDATE d_guild.guild_search"), eq(20), eq(1)))
                 .thenReturn(0);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("level", 20);
+        payload.put("guildExp", 100L);
+        payload.put("guildPoint", 25L);
         payload.put("fund", 123456L);
         payload.put("expectedLevel", 30);
+        payload.put("expectedGuildExp", 54L);
+        payload.put("expectedGuildPoint", 77L);
         payload.put("expectedFund", 403831200L);
 
         Map<String, Object> result = service.updateGuild(1, payload);
 
         InOrder order = inOrder(jdbcTemplate);
+        order.verify(jdbcTemplate).queryForList(contains("information_schema.COLUMNS"));
         order.verify(jdbcTemplate).queryForList(contains("FOR UPDATE"), eq(1));
         order.verify(jdbcTemplate).update(
-                contains("SET lev_up_time=CASE WHEN lev<>? THEN NOW() ELSE lev_up_time END,lev=?,guild_fund=?"),
-                eq(20), eq(20), eq(123456L), eq(1));
+                contains("lev=?,guild_exp=?,guild_point=?,guild_fund=?"),
+                eq(20), eq(20), eq(100L), eq(25L), eq(123456L), eq(1));
         order.verify(jdbcTemplate).update(contains("UPDATE d_guild.guild_search"), eq(20), eq(1));
         assertEquals(20, result.get("level"));
+        assertEquals(100L, result.get("guildExp"));
+        assertEquals(25L, result.get("guildPoint"));
         assertEquals(123456L, result.get("fund"));
     }
 
@@ -156,12 +180,17 @@ public class GuildManagementServiceTest {
     public void rejectsStaleGuildUpdate() {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         GuildManagementService service = service(jdbcTemplate, true);
+        stubGuildSettingsSchema(jdbcTemplate);
         when(jdbcTemplate.queryForList(contains("FOR UPDATE"), eq(1)))
                 .thenReturn(Collections.singletonList(guildRow()));
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("level", 20);
+        payload.put("guildExp", 100L);
+        payload.put("guildPoint", 25L);
         payload.put("fund", 123456L);
         payload.put("expectedLevel", 29);
+        payload.put("expectedGuildExp", 54L);
+        payload.put("expectedGuildPoint", 77L);
         payload.put("expectedFund", 403831200L);
 
         try {
@@ -179,8 +208,12 @@ public class GuildManagementServiceTest {
         GuildManagementService service = service(jdbcTemplate, true);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("level", 30);
+        payload.put("guildExp", 54L);
+        payload.put("guildPoint", 77L);
         payload.put("fund", 4294967296L);
         payload.put("expectedLevel", 30);
+        payload.put("expectedGuildExp", 54L);
+        payload.put("expectedGuildPoint", 77L);
         payload.put("expectedFund", 0);
 
         try {
@@ -190,6 +223,31 @@ public class GuildManagementServiceTest {
             assertTrue(expected.getMessage().contains("资金"));
         }
         verify(jdbcTemplate, never()).queryForList(anyString(), any(Object[].class));
+    }
+
+    @Test
+    public void rejectsGuildSettingsWhenRequiredSchemaColumnIsMissing() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GuildManagementService service = service(jdbcTemplate, true);
+        when(jdbcTemplate.queryForList(contains("information_schema.COLUMNS")))
+                .thenReturn(guildSettingsSchema("lev", "guild_exp", "guild_fund"));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("level", 20);
+        payload.put("guildExp", 100L);
+        payload.put("guildPoint", 25L);
+        payload.put("fund", 123456L);
+        payload.put("expectedLevel", 30);
+        payload.put("expectedGuildExp", 54L);
+        payload.put("expectedGuildPoint", 77L);
+        payload.put("expectedFund", 403831200L);
+
+        try {
+            service.updateGuild(1, payload);
+            fail("Expected missing guild schema column to be rejected");
+        } catch (ValidationException expected) {
+            assertTrue(expected.getMessage().contains("guild_point"));
+        }
+        verify(jdbcTemplate, never()).queryForList(contains("FOR UPDATE"), eq(1));
     }
 
     @Test
@@ -458,5 +516,130 @@ public class GuildManagementServiceTest {
         Map<?, ?> member = (Map<?, ?>) result.get("member");
         assertEquals(55L, member.get("memberPoint"));
         assertEquals(3, member.get("grade"));
+    }
+
+    @Test
+    public void listsPendingApplicationsWithCharacterDetails() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GuildManagementService service = service(jdbcTemplate, true);
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_info"), eq(1)))
+                .thenReturn(Collections.singletonList(guildRow()));
+        when(jdbcTemplate.queryForObject(
+                contains("COUNT(*) FROM d_guild.guild_join_list"),
+                any(Object[].class),
+                eq(Number.class)))
+                .thenReturn(1);
+        Map<String, Object> application = new LinkedHashMap<>();
+        application.put("guildId", 1);
+        application.put("memberId", 18000088L);
+        application.put("characNo", 88);
+        application.put("characName", "Applicant");
+        application.put("accountname", "account-88");
+        application.put("level", 86);
+        application.put("job", 0);
+        application.put("growType", 19);
+        application.put("memo", "join");
+        application.put("applyTime", "2026-07-31 12:00:00");
+        when(jdbcTemplate.queryForList(
+                contains("FROM d_guild.guild_join_list gj"),
+                eq(1), eq(20), eq(0)))
+                .thenReturn(Collections.singletonList(application));
+
+        Map<String, Object> result = service.listApplications(1, 1, 20);
+
+        assertEquals(1, result.get("totalSize"));
+        Map<?, ?> row = (Map<?, ?>) ((List<?>) result.get("list")).get(0);
+        assertEquals("Applicant", row.get("characName"));
+        assertEquals("account-88", row.get("accountname"));
+    }
+
+    @Test
+    public void updatesMemberContributionWithStaleValueProtection() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GuildManagementService service = service(jdbcTemplate, true);
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_info"), eq(1)))
+                .thenReturn(Collections.singletonList(guildRow()));
+        Map<String, Object> member = new LinkedHashMap<>();
+        member.put("guildId", 1);
+        member.put("characNo", 26);
+        member.put("characName", "Member");
+        member.put("grade", 3);
+        member.put("memberPoint", 55L);
+        when(jdbcTemplate.queryForList(contains("member_point AS memberPoint"), eq(1), eq(26)))
+                .thenReturn(Collections.singletonList(member));
+        when(jdbcTemplate.update(contains("SET member_point=?"), eq(99L), eq(1), eq(26), eq(55L)))
+                .thenReturn(1);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("memberPoint", 99L);
+        payload.put("expectedMemberPoint", 55L);
+
+        Map<String, Object> result = service.updateMemberContribution(1, 26, payload);
+
+        assertEquals(99L, result.get("memberPoint"));
+    }
+
+    @Test
+    public void updatesAnnouncementAndSkillPointsWithoutEditingSkillBlob() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GuildManagementService service = service(jdbcTemplate, true);
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_info"), eq(1)))
+                .thenReturn(Collections.singletonList(guildRow()));
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_notice"), eq(1)))
+                .thenReturn(Collections.emptyList());
+        when(jdbcTemplate.update(contains("INSERT INTO d_guild.guild_notice"), eq(1), eq("Welcome")))
+                .thenReturn(1);
+        Map<String, Object> announcementPayload = new LinkedHashMap<>();
+        announcementPayload.put("notice", "Welcome");
+
+        Map<String, Object> announcement = service.updateAnnouncement(1, announcementPayload);
+
+        assertEquals("Welcome", announcement.get("notice"));
+
+        Map<String, Object> skill = new LinkedHashMap<>();
+        skill.put("remainSp", 3L);
+        skill.put("usedSp", 7L);
+        skill.put("skillSlotSize", 32);
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_skill"), eq(1)))
+                .thenReturn(Collections.singletonList(skill));
+        when(jdbcTemplate.update(contains("SET remain_sp=?"), eq(5L), eq(1), eq(3L)))
+                .thenReturn(1);
+        Map<String, Object> skillPayload = new LinkedHashMap<>();
+        skillPayload.put("remainSp", 5L);
+        skillPayload.put("expectedRemainSp", 3L);
+
+        Map<String, Object> updatedSkill = service.updateSkillPoints(1, skillPayload);
+
+        assertEquals(5L, updatedSkill.get("remainSp"));
+        verify(jdbcTemplate, never()).update(contains("skill_slot"), any(Object[].class));
+    }
+
+    @Test
+    public void removesNonLeaderMemberAcrossGuildTables() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        GuildManagementService service = service(jdbcTemplate, true);
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_info"), eq(1)))
+                .thenReturn(Collections.singletonList(guildRow()));
+        Map<String, Object> member = new LinkedHashMap<>();
+        member.put("guildId", 1);
+        member.put("memberId", 18000013L);
+        member.put("characNo", 26);
+        member.put("characName", "Member");
+        member.put("grade", 3);
+        member.put("memberPoint", 12L);
+        when(jdbcTemplate.queryForList(contains("FROM d_guild.guild_member gm"), eq(1), eq(26)))
+                .thenReturn(Collections.singletonList(member));
+        when(jdbcTemplate.update(contains("UPDATE d_guild.guild_member SET member_flag=0"), eq(1), eq(26)))
+                .thenReturn(1);
+        when(jdbcTemplate.update(contains("UPDATE taiwan_cain.charac_info SET guild_id=0"), eq(26), eq(1)))
+                .thenReturn(1);
+        when(jdbcTemplate.update(contains("member_count=GREATEST"), eq(1)))
+                .thenReturn(1);
+
+        Map<String, Object> result = service.removeMember(1, 26);
+
+        assertEquals(26, result.get("characNo"));
+        assertEquals("removed", result.get("status"));
+        verify(jdbcTemplate).update(contains("DELETE FROM d_guild.guild_join_list"), eq(1), eq(26));
+        verify(jdbcTemplate).update(contains("UPDATE d_guild.guild_search"), eq(1), eq(1));
     }
 }

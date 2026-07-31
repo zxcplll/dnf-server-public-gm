@@ -157,8 +157,24 @@ const routes: Array<RouteRecordRaw> = [
                         meta: {
                             title: '玩家角色管理'
                         }
+                    },
+                    {
+                        path: 'online',
+                        name: 'RealtimePlayers',
+                        component: () => import('../views/admin/player/RealtimePlayers.vue'),
+                        meta: {
+                            title: '实时在线'
+                        }
                     }
                 ]
+            },
+            {
+                path: 'analytics',
+                name: 'OperationsAnalytics',
+                component: () => import('../views/admin/analytics/OperationsAnalytics.vue'),
+                meta: {
+                    title: '运营统计'
+                }
             },
             {
                 path: 'reward',

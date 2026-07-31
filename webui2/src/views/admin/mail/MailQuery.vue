@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import Request from '../../../api/Request';
 import ItemPicker from '../../../components/ItemPicker.vue';
 import ItemImg from '../../../components/ItemImg.vue';
+import { openPlayerInspector } from '../../../composables/usePlayerInspector';
 
 const loading = ref(false);
 const filters = reactive({
@@ -97,7 +98,7 @@ onMounted(load);
             <template #cell="{ record }"><span>{{ text(record.sendCharacName) }}</span><a-tag size="small" color="arcoblue" class="sender-tag">{{ text(record.senderType) }}</a-tag></template>
           </a-table-column>
           <a-table-column title="收件角色" :width="170">
-            <template #cell="{ record }">{{ text(record.receiverName, text(record.receiveCharacNo)) }}</template>
+            <template #cell="{ record }"><button v-if="record.receiveCharacNo" type="button" class="profile-link" @click="openPlayerInspector(Number(record.receiveCharacNo), 'mail', '邮件查询')">{{ text(record.receiverName, text(record.receiveCharacNo)) }}</button><span v-else>{{ text(record.receiverName) }}</span></template>
           </a-table-column>
           <a-table-column title="UID" data-index="receiverUid" :width="100" />
           <a-table-column title="物品" :width="230">
@@ -134,5 +135,7 @@ onMounted(load);
 .item-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-id { color: var(--color-text-3); font-size: 11px; }
 .sender-tag { margin-left: 4px; flex: none; }
+.profile-link { padding: 0; border: 0; color: var(--gm-blue); background: transparent; cursor: pointer; text-align: left; }
+.profile-link:hover { color: var(--gm-cyan); }
 @media (max-width: 900px) { .mail-page { padding: 8px; } }
 </style>

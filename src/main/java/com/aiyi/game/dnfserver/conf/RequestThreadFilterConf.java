@@ -136,6 +136,13 @@ public class RequestThreadFilterConf implements HandlerInterceptor {
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
-
+        ThreadUtil.clearCacheData();
+        ThreadUtil.setUserEntity(null);
+        ThreadUtil.setUserId(null);
+        ThreadUtil.setUserName(null);
+        ThreadUtil.setToken(null);
+        ThreadUtil.setClientType(null);
+        ThreadUtil.setClientDriver(null);
+        ThreadUtil.setRequestId(null);
     }
 }

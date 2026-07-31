@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import Request from '../../api/Request';
 import router from '../../router';
+import { openPlayerInspector } from '../../composables/usePlayerInspector';
 
 const loading = ref(true);
 const hasLoaded = ref(false);
@@ -33,6 +34,7 @@ const openRoster = (kind: 'online' | 'today') => {
   rosterKind.value = kind;
   rosterVisible.value = true;
 };
+const inspectPlayer = (row: any) => openPlayerInspector(Number(row?.characNo ?? row?.id), 'profile', rosterKind.value === 'online' ? '首页当前在线' : '首页今日上线');
 onMounted(() => { load(); timer = window.setInterval(load, 10000); });
 onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
 </script>
@@ -57,8 +59,8 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
       </a-row>
 
       <a-row :gutter="14" class="roster-row">
-        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot online"></span>当前在线</span><a-badge :count="(data.overview?.online || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.online || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar level-badge online-avatar">LV.{{ row.level ?? row.lev ?? '-' }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.online || []).length" description="当前没有在线角色" /></div><template #actions><a-button type="text" size="small" @click="openRoster('online')">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
-        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot today"></span>今日上线</span><a-badge :count="(data.overview?.todayActive || []).length" :max-count="9999" /></template><div class="roster-list"><div v-for="row in (data.overview?.todayActive || []).slice(0, 10)" :key="row.id" class="roster-item"><span class="avatar level-badge today-avatar">LV.{{ row.level ?? row.lev ?? '-' }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></div><a-empty v-if="!(data.overview?.todayActive || []).length" description="今日还没有上线角色" /></div><template #actions><a-button type="text" size="small" @click="openRoster('today')">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
+        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot online"></span>当前在线</span><a-badge :count="(data.overview?.online || []).length" :max-count="9999" /></template><div class="roster-list"><button v-for="row in (data.overview?.online || []).slice(0, 10)" :key="row.id" type="button" class="roster-item" @click="inspectPlayer(row)"><span class="avatar level-badge online-avatar">LV.{{ row.level ?? row.lev ?? '-' }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></button><a-empty v-if="!(data.overview?.online || []).length" description="当前没有在线角色" /></div><template #actions><a-button type="text" size="small" @click="openRoster('online')">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
+        <a-col :xs="24" :lg="12"><a-card class="roster-card"><template #title><span class="card-title"><span class="state-dot today"></span>今日上线</span><a-badge :count="(data.overview?.todayActive || []).length" :max-count="9999" /></template><div class="roster-list"><button v-for="row in (data.overview?.todayActive || []).slice(0, 10)" :key="row.id" type="button" class="roster-item" @click="inspectPlayer(row)"><span class="avatar level-badge today-avatar">LV.{{ row.level ?? row.lev ?? '-' }}</span><span class="name">{{ row.name || '未知角色' }}</span><span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span></button><a-empty v-if="!(data.overview?.todayActive || []).length" description="今日还没有上线角色" /></div><template #actions><a-button type="text" size="small" @click="openRoster('today')">查看完整名单 <icon-right /></a-button></template></a-card></a-col>
       </a-row>
 
       <a-modal
@@ -75,13 +77,13 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
           </span>
         </template>
         <div class="full-roster-list">
-          <div v-for="row in rosterRows" :key="`${rosterKind}-${row.id}`" class="full-roster-item">
+          <button v-for="row in rosterRows" :key="`${rosterKind}-${row.id}`" type="button" class="full-roster-item" @click="inspectPlayer(row)">
             <span class="avatar level-badge" :class="rosterKind === 'online' ? 'online-avatar' : 'today-avatar'">
               LV.{{ row.level ?? row.lev ?? '-' }}
             </span>
             <span class="name">{{ row.name || '未知角色' }}</span>
             <span class="meta">角色 {{ row.id }} · UID {{ row.uid }}</span>
-          </div>
+          </button>
           <a-empty v-if="!rosterRows.length" :description="rosterEmptyText" />
         </div>
       </a-modal>
@@ -268,8 +270,18 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
   align-items: center;
   min-height: 49px;
   gap: 9px;
+  border: 0;
   border-bottom: 1px solid var(--gm-rule);
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
+
+.roster-item:hover .name { color: var(--gm-cyan); }
 
 .roster-item:last-child { border-bottom: 0; }
 
@@ -316,7 +328,15 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer); });
   align-items: center;
   min-height: 54px;
   gap: 10px;
+  border: 0;
   border-bottom: 1px solid var(--gm-rule);
+  width: 100%;
+  padding-inline: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
 .full-roster-item:last-child { border-bottom: 0; }

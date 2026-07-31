@@ -26,6 +26,7 @@ public class GmLogRetentionService {
         deleted += cleanupTable("gm_cdk_redemption", "redeemed_at", null);
         deleted += cleanupTable("gm_backup_entry", "created_at", "status='FAILED'");
         deleted += cleanupTable("d_guild", "guild_grade_log", "occ_time", null);
+        deleted += cleanupTable("gm_operation_audit", "created_at", null);
         if (deleted > 0) {
             LOGGER.info("Deleted {} GM log rows older than {} days", deleted, RETENTION_DAYS);
         }
